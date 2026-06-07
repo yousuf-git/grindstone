@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -97,6 +99,10 @@ public class LoadTestService {
         dbPollScheduler = Executors.newSingleThreadScheduledExecutor();
         dbPollScheduler.scheduleAtFixedRate(this::pollDbStats, 2, 5, TimeUnit.SECONDS);
 
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void onReady() {
         if (autoStart) {
             log.info("Auto-starting load test");
             start(null, null);
