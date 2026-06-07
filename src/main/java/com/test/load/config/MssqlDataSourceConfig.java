@@ -51,6 +51,7 @@ public class MssqlDataSourceConfig {
 
         Map<String, Object> props = new HashMap<>();
         props.put("hibernate.hbm2ddl.auto", "update");
+        props.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
         props.put("hibernate.physical_naming_strategy",
             "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy");
         em.setJpaPropertyMap(props);
