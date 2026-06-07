@@ -15,6 +15,8 @@ import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,6 +27,9 @@ import java.util.Map;
     transactionManagerRef = "transactionManager"
 )
 public class PostgresDataSourceConfig {
+
+    @Value("${spring.jpa.hibernate.ddl-auto:update}")
+    private String ddlAuto;
 
     @Primary
     @Bean
@@ -59,7 +64,7 @@ public class PostgresDataSourceConfig {
         em.setPersistenceUnitName("pg");
 
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.hbm2ddl.auto", "update");
+        props.put("hibernate.hbm2ddl.auto", ddlAuto);
         props.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
         props.put("hibernate.physical_naming_strategy",
             "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy");

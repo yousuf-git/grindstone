@@ -14,6 +14,8 @@ import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,6 +27,9 @@ import java.util.Map;
     transactionManagerRef = "mssqlTransactionManager"
 )
 public class MssqlDataSourceConfig {
+
+    @Value("${spring.jpa.hibernate.ddl-auto:update}")
+    private String ddlAuto;
 
     @Bean
     @ConfigurationProperties("app.datasource.mysql")
@@ -50,7 +55,7 @@ public class MssqlDataSourceConfig {
         em.setPersistenceUnitName("mysql");
 
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.hbm2ddl.auto", "update");
+        props.put("hibernate.hbm2ddl.auto", ddlAuto);
         props.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
         props.put("hibernate.physical_naming_strategy",
             "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy");
