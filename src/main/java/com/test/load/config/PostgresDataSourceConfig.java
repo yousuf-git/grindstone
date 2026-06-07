@@ -39,14 +39,14 @@ public class PostgresDataSourceConfig {
 
     @Primary
     @Bean
-    @ConfigurationProperties("spring.datasource")
+    @ConfigurationProperties("app.datasource.pg")
     public DataSourceProperties pgDataSourceProperties() {
         return new DataSourceProperties();
     }
 
     @Primary
     @Bean
-    @ConfigurationProperties("spring.datasource.hikari")
+    @ConfigurationProperties("app.datasource.pg.hikari")
     public HikariDataSource pgDataSource() {
         return pgDataSourceProperties()
             .initializeDataSourceBuilder()
