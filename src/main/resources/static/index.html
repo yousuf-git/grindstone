@@ -107,16 +107,20 @@
             <div id="stat-pg-rows" class="text-2xl font-bold text-emerald-400 stat-value">0</div>
         </div>
         <div class="card card-pg rounded-xl p-4 text-center">
-            <div class="text-xs text-emerald-500 mb-1">PG Size</div>
+            <div class="text-xs text-emerald-500 mb-1">PG Storage</div>
             <div id="stat-pg-size" class="text-2xl font-bold text-emerald-300 stat-value">0 B</div>
+            <div class="mt-1.5 w-full bg-dark-900 rounded-full h-1.5"><div id="bar-pg" class="h-1.5 rounded-full bg-emerald-500 transition-all" style="width:0%"></div></div>
+            <div id="stat-pg-cap" class="text-xs text-gray-600 mt-1">/ 0 B</div>
         </div>
         <div class="card card-mssql rounded-xl p-4 text-center" id="card-mssql-rows">
             <div class="text-xs text-orange-500 mb-1">MySQL Rows</div>
             <div id="stat-mssql-rows" class="text-2xl font-bold text-orange-400 stat-value">0</div>
         </div>
         <div class="card card-mssql rounded-xl p-4 text-center" id="card-mssql-size">
-            <div class="text-xs text-orange-500 mb-1">MySQL Size</div>
+            <div class="text-xs text-orange-500 mb-1">MySQL Storage</div>
             <div id="stat-mssql-size" class="text-2xl font-bold text-orange-300 stat-value">0 B</div>
+            <div class="mt-1.5 w-full bg-dark-900 rounded-full h-1.5"><div id="bar-mssql" class="h-1.5 rounded-full bg-orange-500 transition-all" style="width:0%"></div></div>
+            <div id="stat-mssql-cap" class="text-xs text-gray-600 mt-1">/ 0 B</div>
         </div>
         <div class="card rounded-xl p-4 text-center">
             <div class="text-xs text-gray-500 mb-1">Errors</div>
@@ -313,11 +317,23 @@ function updateUI(d) {
     // PG stats
     document.getElementById('stat-pg-rows').textContent = (d.pgRowCount || 0).toLocaleString();
     document.getElementById('stat-pg-size').textContent = fmtBytes(d.pgSizeBytes || 0);
+    if (d.pgMaxBytes > 0) {
+        const pct = Math.min(100, (d.pgSizeBytes || 0) / d.pgMaxBytes * 100);
+        document.getElementById('bar-pg').style.width = pct.toFixed(1) + '%';
+        document.getElementById('bar-pg').className = 'h-1.5 rounded-full transition-all ' + (pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-emerald-500');
+        document.getElementById('stat-pg-cap').textContent = fmtBytes(d.pgSizeBytes || 0) + ' / ' + fmtBytes(d.pgMaxBytes) + ' (' + pct.toFixed(1) + '%)';
+    }
 
     // MSSQL stats
     updateMssqlVisibility(d.mssqlEnabled || false);
     document.getElementById('stat-mssql-rows').textContent = (d.mssqlRowCount || 0).toLocaleString();
     document.getElementById('stat-mssql-size').textContent = fmtBytes(d.mssqlSizeBytes || 0);
+    if (d.mssqlMaxBytes > 0) {
+        const pct = Math.min(100, (d.mssqlSizeBytes || 0) / d.mssqlMaxBytes * 100);
+        document.getElementById('bar-mssql').style.width = pct.toFixed(1) + '%';
+        document.getElementById('bar-mssql').className = 'h-1.5 rounded-full transition-all ' + (pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-orange-500');
+        document.getElementById('stat-mssql-cap').textContent = fmtBytes(d.mssqlSizeBytes || 0) + ' / ' + fmtBytes(d.mssqlMaxBytes) + ' (' + pct.toFixed(1) + '%)';
+    }
 
     // Footer
     document.getElementById('foot-ops').textContent = d.totalOps.toLocaleString();

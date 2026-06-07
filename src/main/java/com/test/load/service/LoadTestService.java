@@ -58,6 +58,12 @@ public class LoadTestService {
     @Value("${loadtest.auto-start:false}")
     private boolean autoStart;
 
+    @Value("${app.storage.pg-max-bytes:0}")
+    private long pgMaxBytes;
+
+    @Value("${app.storage.mysql-max-bytes:0}")
+    private long mssqlMaxBytes;
+
     private ExecutorService workerPool;
     private ScheduledExecutorService statsScheduler;
     private ScheduledExecutorService dbPollScheduler;
@@ -81,6 +87,8 @@ public class LoadTestService {
     public void init() {
         boolean mssqlAvailable = mssqlVideoChunkRepository != null;
         statsService.setMssqlEnabled(mssqlAvailable);
+        statsService.setPgMaxBytes(pgMaxBytes);
+        statsService.setMssqlMaxBytes(mssqlMaxBytes);
         log.info("MSSQL database: {}", mssqlAvailable ? "ENABLED" : "DISABLED");
 
         statsScheduler = Executors.newSingleThreadScheduledExecutor();

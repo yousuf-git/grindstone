@@ -33,6 +33,8 @@ public class StatsService {
     private volatile long pgSizeBytes = 0;
     private volatile long mssqlRowCount = 0;
     private volatile long mssqlSizeBytes = 0;
+    private volatile long pgMaxBytes = 0;
+    private volatile long mssqlMaxBytes = 0;
 
     private long lastOps, lastPgInserts, lastPgReads, lastMssqlInserts, lastMssqlReads, lastBytes;
     private long lastTimestamp = System.currentTimeMillis();
@@ -66,6 +68,8 @@ public class StatsService {
     public void setPgSizeBytes(long size) { this.pgSizeBytes = size; }
     public void setMssqlRowCount(long count) { this.mssqlRowCount = count; }
     public void setMssqlSizeBytes(long size) { this.mssqlSizeBytes = size; }
+    public void setPgMaxBytes(long size) { this.pgMaxBytes = size; }
+    public void setMssqlMaxBytes(long size) { this.mssqlMaxBytes = size; }
     public boolean isRunning() { return running; }
 
     public void reset() {
@@ -118,12 +122,14 @@ public class StatsService {
         stats.put("pgReadsPerSecond", Math.round((curPgRds - lastPgReads) * factor * 10.0) / 10.0);
         stats.put("pgRowCount", pgRowCount);
         stats.put("pgSizeBytes", pgSizeBytes);
+        stats.put("pgMaxBytes", pgMaxBytes);
 
         stats.put("mssqlEnabled", mssqlEnabled);
         stats.put("mssqlInsertsPerSecond", Math.round((curMsIns - lastMssqlInserts) * factor * 10.0) / 10.0);
         stats.put("mssqlReadsPerSecond", Math.round((curMsRds - lastMssqlReads) * factor * 10.0) / 10.0);
         stats.put("mssqlRowCount", mssqlRowCount);
         stats.put("mssqlSizeBytes", mssqlSizeBytes);
+        stats.put("mssqlMaxBytes", mssqlMaxBytes);
 
         stats.put("bytesPerSecond", Math.round((curBytes - lastBytes) * factor));
         stats.put("totalBytesProcessed", curBytes);
