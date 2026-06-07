@@ -102,7 +102,7 @@ The built-in dashboard at `/` streams metrics over WebSocket at 1-second interva
 | Variable | Default | Description |
 |:---|:---:|:---|
 | `JDBC_DATABASE_URL` | localhost | Set automatically by Heroku |
-| `HIKARI_MAX_POOL` | `120` | PG connection pool size |
+| `HIKARI_MAX_POOL` | `4` | PG connection pool size |
 
 #### MySQL (Secondary)
 
