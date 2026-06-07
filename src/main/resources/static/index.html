@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load Test Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { 900: '#0b0f1a', 800: '#111827', 700: '#1e293b', 600: '#334155' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background: #0b0f1a; font-family: 'Inter', system-ui, sans-serif; }
+        .card { background: linear-gradient(135deg, rgba(30,41,59,0.8), rgba(17,24,39,0.9)); border: 1px solid rgba(99,102,241,0.15); }
+        .card-pg { border-color: rgba(52,211,153,0.25); }
+        .card-mssql { border-color: rgba(251,146,60,0.25); }
+        .glow { box-shadow: 0 0 20px rgba(99,102,241,0.1); }
+        .stat-value { font-variant-numeric: tabular-nums; }
+        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .pulse-dot { animation: pulse-dot 1.5s infinite; }
+    </style>
+</head>
+<body class="text-gray-200 min-h-screen">
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-lg">LT</div>
+            <div>
+                <h1 class="text-xl font-bold text-white">Load Test Dashboard</h1>
+                <p class="text-xs text-gray-500">Real-time server stress monitor</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span id="ws-dot" class="w-2.5 h-2.5 rounded-full bg-red-500 pulse-dot"></span>
+            <span id="ws-status" class="text-xs text-gray-400">Disconnected</span>
+        </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="card rounded-xl p-4 mb-6 glow">
+        <div class="flex flex-wrap items-center gap-4">
+            <button id="btn-toggle" onclick="toggleTest()"
+                class="px-6 py-2.5 rounded-lg font-semibold text-sm transition-all duration-200
+                       bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/30">
+                START
+            </button>
+
+            <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-400">Threads</label>
+                <input id="inp-threads" type="number" value="100" min="1" max="500"
+                       class="w-20 px-2 py-1.5 rounded bg-dark-900 border border-gray-700 text-sm text-white focus:border-indigo-500 focus:outline-none">
+            </div>
+
+            <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-400">Chunk (MB)</label>
+                <input id="inp-chunk" type="number" value="10" min="1" max="200"
+                       class="w-20 px-2 py-1.5 rounded bg-dark-900 border border-gray-700 text-sm text-white focus:border-indigo-500 focus:outline-none">
+            </div>
+
+            <div class="flex items-center gap-2 ml-auto">
+                <span class="text-xs text-gray-500">Video:</span>
+                <span id="video-info" class="text-xs text-gray-400 font-mono">—</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Cards Row 1: System -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+        <div class="card rounded-xl p-4 text-center">
+            <div class="text-xs text-gray-500 mb-1">CPU (System)</div>
+            <div id="stat-cpu" class="text-2xl font-bold text-indigo-400 stat-value">0%</div>
+        </div>
+        <div class="card rounded-xl p-4 text-center">
+            <div class="text-xs text-gray-500 mb-1">CPU (Process)</div>
+            <div id="stat-pcpu" class="text-2xl font-bold text-violet-400 stat-value">0%</div>
+        </div>
+        <div class="card rounded-xl p-4 text-center">
+            <div class="text-xs text-gray-500 mb-1">Heap Used</div>
+            <div id="stat-heap" class="text-2xl font-bold text-cyan-400 stat-value">0 MB</div>
+            <div id="stat-heap-max" class="text-xs text-gray-600">/ 0 MB</div>
+        </div>
+        <div class="card rounded-xl p-4 text-center">
+            <div class="text-xs text-gray-500 mb-1">Ops/sec</div>
+            <div id="stat-ops" class="text-2xl font-bold text-emerald-400 stat-value">0</div>
+        </div>
+        <div class="card rounded-xl p-4 text-center">
+            <div class="text-xs text-gray-500 mb-1">Active Threads</div>
+            <div id="stat-threads" class="text-2xl font-bold text-amber-400 stat-value">0</div>
+        </div>
+    </div>
+
+    <!-- Stat Cards Row 2: Databases -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        <div class="card card-pg rounded-xl p-4 text-center">
+            <div class="text-xs text-emerald-500 mb-1">PG Rows</div>
+            <div id="stat-pg-rows" class="text-2xl font-bold text-emerald-400 stat-value">0</div>
+        </div>
+        <div class="card card-pg rounded-xl p-4 text-center">
+            <div class="text-xs text-emerald-500 mb-1">PG Size</div>
+            <div id="stat-pg-size" class="text-2xl font-bold text-emerald-300 stat-value">0 B</div>
+        </div>
+        <div class="card card-mssql rounded-xl p-4 text-center" id="card-mssql-rows">
+            <div class="text-xs text-orange-500 mb-1">MySQL Rows</div>
+            <div id="stat-mssql-rows" class="text-2xl font-bold text-orange-400 stat-value">0</div>
+        </div>
+        <div class="card card-mssql rounded-xl p-4 text-center" id="card-mssql-size">
+            <div class="text-xs text-orange-500 mb-1">MySQL Size</div>
+            <div id="stat-mssql-size" class="text-2xl font-bold text-orange-300 stat-value">0 B</div>
+        </div>
+        <div class="card rounded-xl p-4 text-center">
+            <div class="text-xs text-gray-500 mb-1">Errors</div>
+            <div id="stat-errors" class="text-2xl font-bold text-red-400 stat-value">0</div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1: CPU + Memory -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <div class="card rounded-xl p-4">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">CPU Usage</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-cpu"></canvas></div>
+        </div>
+        <div class="card rounded-xl p-4">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Memory</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-mem"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Charts Row 2: PG + MSSQL -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <div class="card card-pg rounded-xl p-4">
+            <h3 class="text-sm font-semibold text-emerald-400 mb-3">PostgreSQL Ops/sec</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-pg"></canvas></div>
+        </div>
+        <div class="card card-mssql rounded-xl p-4" id="card-mssql-chart">
+            <h3 class="text-sm font-semibold text-orange-400 mb-3">MySQL Ops/sec</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-mssql"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Charts Row 3: Throughput -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div class="card rounded-xl p-4">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Throughput</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-throughput"></canvas></div>
+        </div>
+        <div class="card rounded-xl p-4">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">DB Size Growth</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-dbsize"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Footer Stats -->
+    <div class="card rounded-xl p-4">
+        <div class="flex flex-wrap justify-between text-sm text-gray-400 gap-4">
+            <span>Total Ops: <strong id="foot-ops" class="text-white stat-value">0</strong></span>
+            <span>Bytes Processed: <strong id="foot-bytes" class="text-white stat-value">0 B</strong></span>
+            <span>Uptime: <strong id="foot-uptime" class="text-white stat-value">00:00:00</strong></span>
+            <span class="text-emerald-400">PG: <strong id="foot-pg-ws" class="stat-value">0</strong>w/s <strong id="foot-pg-rs" class="stat-value">0</strong>r/s <strong id="foot-pg-rows" class="stat-value">0</strong> rows <strong id="foot-pg-size" class="stat-value">0 B</strong></span>
+            <span class="text-orange-400" id="foot-mssql">MySQL: <strong id="foot-mssql-ws" class="stat-value">0</strong>w/s <strong id="foot-mssql-rs" class="stat-value">0</strong>r/s <strong id="foot-mssql-rows" class="stat-value">0</strong> rows <strong id="foot-mssql-size" class="stat-value">0 B</strong></span>
+        </div>
+    </div>
+</div>
+
+<script>
+const MAX_POINTS = 120;
+let ws = null;
+let testRunning = false;
+let mssqlEnabled = false;
+
+const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    scales: {
+        x: { display: false },
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280', font: { size: 10 } } }
+    },
+    plugins: { legend: { labels: { color: '#9ca3af', font: { size: 11 }, boxWidth: 12, padding: 8 } } },
+    elements: { point: { radius: 0 }, line: { tension: 0.3, borderWidth: 2 } }
+};
+
+function makeLabels() { return Array(MAX_POINTS).fill(''); }
+function makeData() { return Array(MAX_POINTS).fill(0); }
+
+const cpuChart = new Chart(document.getElementById('chart-cpu'), {
+    type: 'line',
+    data: {
+        labels: makeLabels(),
+        datasets: [
+            { label: 'System CPU %', data: makeData(), borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.1)', fill: true },
+            { label: 'Process CPU %', data: makeData(), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.1)', fill: true }
+        ]
+    },
+    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, max: 100, ticks: { ...chartDefaults.scales.y.ticks, callback: v => v + '%' } } } }
+});
+
+const memChart = new Chart(document.getElementById('chart-mem'), {
+    type: 'line',
+    data: {
+        labels: makeLabels(),
+        datasets: [
+            { label: 'Heap Used (MB)', data: makeData(), borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.1)', fill: true },
+            { label: 'Non-Heap (MB)', data: makeData(), borderColor: '#f472b6', backgroundColor: 'rgba(244,114,182,0.1)', fill: true }
+        ]
+    },
+    options: chartDefaults
+});
+
+const pgChart = new Chart(document.getElementById('chart-pg'), {
+    type: 'line',
+    data: {
+        labels: makeLabels(),
+        datasets: [
+            { label: 'PG Writes/s', data: makeData(), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.1)', fill: true },
+            { label: 'PG Reads/s', data: makeData(), borderColor: '#6ee7b7', backgroundColor: 'rgba(110,231,183,0.1)', fill: true },
+            { label: 'PG Size (MB)', data: makeData(), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: false, yAxisID: 'y1' }
+        ]
+    },
+    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#10b981', font: { size: 10 } } } } }
+});
+
+const mssqlChart = new Chart(document.getElementById('chart-mssql'), {
+    type: 'line',
+    data: {
+        labels: makeLabels(),
+        datasets: [
+            { label: 'MySQL Writes/s', data: makeData(), borderColor: '#fb923c', backgroundColor: 'rgba(251,146,60,0.1)', fill: true },
+            { label: 'MySQL Reads/s', data: makeData(), borderColor: '#fdba74', backgroundColor: 'rgba(253,186,116,0.1)', fill: true },
+            { label: 'MySQL Size (MB)', data: makeData(), borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', fill: false, yAxisID: 'y1' }
+        ]
+    },
+    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#f97316', font: { size: 10 } } } } }
+});
+
+const throughputChart = new Chart(document.getElementById('chart-throughput'), {
+    type: 'line',
+    data: {
+        labels: makeLabels(),
+        datasets: [
+            { label: 'MB/s', data: makeData(), borderColor: '#a3e635', backgroundColor: 'rgba(163,230,53,0.1)', fill: true }
+        ]
+    },
+    options: chartDefaults
+});
+
+const dbSizeChart = new Chart(document.getElementById('chart-dbsize'), {
+    type: 'line',
+    data: {
+        labels: makeLabels(),
+        datasets: [
+            { label: 'PG Size (MB)', data: makeData(), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.1)', fill: true },
+            { label: 'MySQL Size (MB)', data: makeData(), borderColor: '#fb923c', backgroundColor: 'rgba(251,146,60,0.1)', fill: true }
+        ]
+    },
+    options: chartDefaults
+});
+
+function pushPoint(chart, datasetIdx, value) {
+    const ds = chart.data.datasets[datasetIdx].data;
+    ds.push(value);
+    if (ds.length > MAX_POINTS) ds.shift();
+    if (datasetIdx === chart.data.datasets.length - 1) {
+        chart.data.labels.push('');
+        if (chart.data.labels.length > MAX_POINTS) chart.data.labels.shift();
+        chart.update('none');
+    }
+}
+
+function fmtBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(2) + ' GB';
+}
+
+function fmtTime(sec) {
+    const h = Math.floor(sec / 3600).toString().padStart(2, '0');
+    const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+}
+
+function updateMssqlVisibility(enabled) {
+    if (mssqlEnabled === enabled) return;
+    mssqlEnabled = enabled;
+    const mssqlEls = ['card-mssql-rows', 'card-mssql-size', 'card-mssql-chart', 'foot-mssql'];
+    mssqlEls.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = enabled ? '1' : '0.3';
+    });
+}
+
+function updateUI(d) {
+    document.getElementById('stat-cpu').textContent = d.cpuUsage + '%';
+    document.getElementById('stat-pcpu').textContent = d.processCpuUsage + '%';
+    document.getElementById('stat-heap').textContent = fmtBytes(d.heapUsed);
+    document.getElementById('stat-heap-max').textContent = '/ ' + fmtBytes(d.heapMax);
+    document.getElementById('stat-ops').textContent = d.opsPerSecond;
+    document.getElementById('stat-threads').textContent = d.activeThreads;
+    document.getElementById('stat-errors').textContent = d.errors;
+
+    // PG stats
+    document.getElementById('stat-pg-rows').textContent = (d.pgRowCount || 0).toLocaleString();
+    document.getElementById('stat-pg-size').textContent = fmtBytes(d.pgSizeBytes || 0);
+
+    // MSSQL stats
+    updateMssqlVisibility(d.mssqlEnabled || false);
+    document.getElementById('stat-mssql-rows').textContent = (d.mssqlRowCount || 0).toLocaleString();
+    document.getElementById('stat-mssql-size').textContent = fmtBytes(d.mssqlSizeBytes || 0);
+
+    // Footer
+    document.getElementById('foot-ops').textContent = d.totalOps.toLocaleString();
+    document.getElementById('foot-bytes').textContent = fmtBytes(d.totalBytesProcessed);
+    document.getElementById('foot-uptime').textContent = fmtTime(d.uptimeSeconds);
+
+    document.getElementById('foot-pg-ws').textContent = d.pgInsertsPerSecond || 0;
+    document.getElementById('foot-pg-rs').textContent = d.pgReadsPerSecond || 0;
+    document.getElementById('foot-pg-rows').textContent = (d.pgRowCount || 0).toLocaleString();
+    document.getElementById('foot-pg-size').textContent = fmtBytes(d.pgSizeBytes || 0);
+
+    document.getElementById('foot-mssql-ws').textContent = d.mssqlInsertsPerSecond || 0;
+    document.getElementById('foot-mssql-rs').textContent = d.mssqlReadsPerSecond || 0;
+    document.getElementById('foot-mssql-rows').textContent = (d.mssqlRowCount || 0).toLocaleString();
+    document.getElementById('foot-mssql-size').textContent = fmtBytes(d.mssqlSizeBytes || 0);
+
+    if (d.videoPath) {
+        document.getElementById('video-info').textContent = d.videoPath + (d.videoSize ? ' (' + fmtBytes(d.videoSize) + ')' : '');
+    }
+
+    // Charts
+    pushPoint(cpuChart, 0, d.cpuUsage);
+    pushPoint(cpuChart, 1, d.processCpuUsage);
+
+    pushPoint(memChart, 0, d.heapUsed / 1048576);
+    pushPoint(memChart, 1, d.nonHeapUsed / 1048576);
+
+    pushPoint(pgChart, 0, d.pgInsertsPerSecond || 0);
+    pushPoint(pgChart, 1, d.pgReadsPerSecond || 0);
+    pushPoint(pgChart, 2, (d.pgSizeBytes || 0) / 1048576);
+
+    pushPoint(mssqlChart, 0, d.mssqlInsertsPerSecond || 0);
+    pushPoint(mssqlChart, 1, d.mssqlReadsPerSecond || 0);
+    pushPoint(mssqlChart, 2, (d.mssqlSizeBytes || 0) / 1048576);
+
+    pushPoint(throughputChart, 0, d.bytesPerSecond / 1048576);
+
+    pushPoint(dbSizeChart, 0, (d.pgSizeBytes || 0) / 1048576);
+    pushPoint(dbSizeChart, 1, (d.mssqlSizeBytes || 0) / 1048576);
+
+    testRunning = d.running;
+    updateButton();
+}
+
+function updateButton() {
+    const btn = document.getElementById('btn-toggle');
+    if (testRunning) {
+        btn.textContent = 'STOP';
+        btn.className = btn.className.replace(/bg-emerald-600 hover:bg-emerald-500/, 'bg-red-600 hover:bg-red-500')
+            .replace('shadow-emerald-900/30', 'shadow-red-900/30');
+    } else {
+        btn.textContent = 'START';
+        btn.className = btn.className.replace(/bg-red-600 hover:bg-red-500/, 'bg-emerald-600 hover:bg-emerald-500')
+            .replace('shadow-red-900/30', 'shadow-emerald-900/30');
+    }
+}
+
+async function toggleTest() {
+    const btn = document.getElementById('btn-toggle');
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+        if (testRunning) {
+            await fetch('/api/stop', { method: 'POST' });
+        } else {
+            const threads = parseInt(document.getElementById('inp-threads').value) || 100;
+            const chunkSizeMb = parseInt(document.getElementById('inp-chunk').value) || 10;
+            const res = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ threads, chunkSizeMb })
+            });
+            const data = await res.json();
+            if (data.status === 'error') {
+                alert(data.message);
+            }
+        }
+    } catch (e) {
+        alert('Request failed: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        updateButton();
+    }
+}
+
+function connectWs() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + location.host + '/ws/stats');
+
+    ws.onopen = () => {
+        document.getElementById('ws-dot').className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-dot';
+        document.getElementById('ws-status').textContent = 'Connected';
+    };
+
+    ws.onmessage = (e) => {
+        try { updateUI(JSON.parse(e.data)); } catch(err) { console.error(err); }
+    };
+
+    ws.onclose = () => {
+        document.getElementById('ws-dot').className = 'w-2.5 h-2.5 rounded-full bg-red-500 pulse-dot';
+        document.getElementById('ws-status').textContent = 'Disconnected';
+        setTimeout(connectWs, 2000);
+    };
+
+    ws.onerror = () => ws.close();
+}
+
+connectWs();
+
+fetch('/api/config').then(r => r.json()).then(cfg => {
+    document.getElementById('inp-threads').value = cfg.threads;
+    document.getElementById('inp-chunk').value = cfg.chunkSizeMb;
+}).catch(() => {});
+</script>
+</body>
+</html>
