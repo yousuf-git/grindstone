@@ -1,9 +1,9 @@
 package com.test.load.service;
 
 import com.test.load.entity.pg.PgVideoChunk;
-import com.test.load.entity.mssql.MssqlVideoChunk;
+import com.test.load.entity.pg2.Pg2VideoChunk;
 import com.test.load.repository.pg.PgVideoChunkRepository;
-import com.test.load.repository.mssql.MssqlVideoChunkRepository;
+import com.test.load.repository.pg2.Pg2VideoChunkRepository;
 import com.test.load.websocket.StatsWebSocketHandler;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -37,7 +37,7 @@ public class LoadTestService {
     private final ObjectMapper objectMapper;
 
     @Autowired(required = false)
-    private MssqlVideoChunkRepository mssqlVideoChunkRepository;
+    private Pg2VideoChunkRepository pg2VideoChunkRepository;
 
     @Value("${loadtest.threads:100}")
     private int threadCount;
@@ -63,8 +63,8 @@ public class LoadTestService {
     @Value("${app.storage.pg-max-bytes:0}")
     private long pgMaxBytes;
 
-    @Value("${app.storage.mysql-max-bytes:0}")
-    private long mssqlMaxBytes;
+    @Value("${app.storage.pg2-max-bytes:0}")
+    private long pg2MaxBytes;
 
     private ExecutorService workerPool;
     private ScheduledExecutorService statsScheduler;
@@ -87,11 +87,11 @@ public class LoadTestService {
 
     @PostConstruct
     public void init() {
-        boolean mssqlAvailable = mssqlVideoChunkRepository != null;
-        statsService.setMssqlEnabled(mssqlAvailable);
+        boolean pg2Available = pg2VideoChunkRepository != null;
+        statsService.setPg2Enabled(pg2Available);
         statsService.setPgMaxBytes(pgMaxBytes);
-        statsService.setMssqlMaxBytes(mssqlMaxBytes);
-        log.info("MSSQL database: {}", mssqlAvailable ? "ENABLED" : "DISABLED");
+        statsService.setPg2MaxBytes(pg2MaxBytes);
+        log.info("PG2 database: {}", pg2Available ? "ENABLED" : "DISABLED");
 
         statsScheduler = Executors.newSingleThreadScheduledExecutor();
         statsScheduler.scheduleAtFixedRate(this::pushStats, 0, 1, TimeUnit.SECONDS);
@@ -130,7 +130,7 @@ public class LoadTestService {
         running = true;
         statsService.reset();
         statsService.setRunning(true);
-        statsService.setMssqlEnabled(mssqlVideoChunkRepository != null);
+        statsService.setPg2Enabled(pg2VideoChunkRepository != null);
         statsService.setStartTime(System.currentTimeMillis());
         statsService.setThreadCount(threadCount);
         statsService.setChunkSizeMb(chunkSizeMb);
@@ -153,8 +153,8 @@ public class LoadTestService {
             workerPool.submit(this::workerLoop);
         }
 
-        log.info("Load test started: {} threads, {}MB chunks, file={}, mssql={}",
-            threadCount, chunkSizeMb, videoPath, mssqlVideoChunkRepository != null);
+        log.info("Load test started: {} threads, {}MB chunks, file={}, pg2={}",
+            threadCount, chunkSizeMb, videoPath, pg2VideoChunkRepository != null);
         return "Started";
     }
 
@@ -209,30 +209,30 @@ public class LoadTestService {
                         log.debug("PG operation failed", e);
                     }
 
-                    // MSSQL write + read
-                    if (mssqlVideoChunkRepository != null) {
+                    // PG2 write + read
+                    if (pg2VideoChunkRepository != null) {
                         try {
-                            MssqlVideoChunk msEntity = new MssqlVideoChunk();
-                            msEntity.setChunkData(chunk);
-                            msEntity.setHash(hash);
-                            msEntity.setThreadName(Thread.currentThread().getName());
-                            msEntity.setChunkSize(chunk.length);
-                            msEntity.setCreatedAt(LocalDateTime.now());
-                            MssqlVideoChunk msSaved = mssqlVideoChunkRepository.save(msEntity);
-                            statsService.incrementMssqlInserts();
+                            Pg2VideoChunk pg2Entity = new Pg2VideoChunk();
+                            pg2Entity.setChunkData(chunk);
+                            pg2Entity.setHash(hash);
+                            pg2Entity.setThreadName(Thread.currentThread().getName());
+                            pg2Entity.setChunkSize(chunk.length);
+                            pg2Entity.setCreatedAt(LocalDateTime.now());
+                            Pg2VideoChunk pg2Saved = pg2VideoChunkRepository.save(pg2Entity);
+                            statsService.incrementPg2Inserts();
 
-                            MssqlVideoChunk msFetched = mssqlVideoChunkRepository.findById(msSaved.getId()).orElse(null);
-                            statsService.incrementMssqlReads();
+                            Pg2VideoChunk pg2Fetched = pg2VideoChunkRepository.findById(pg2Saved.getId()).orElse(null);
+                            statsService.incrementPg2Reads();
 
-                            if (msFetched != null) {
-                                String verifyHash = computeHash(msFetched.getChunkData(), hashingRounds);
+                            if (pg2Fetched != null) {
+                                String verifyHash = computeHash(pg2Fetched.getChunkData(), hashingRounds);
                                 if (!hash.equals(verifyHash)) {
                                     statsService.incrementErrors();
                                 }
                             }
                         } catch (Exception e) {
                             statsService.incrementErrors();
-                            log.debug("MSSQL operation failed", e);
+                            log.debug("PG2 operation failed", e);
                         }
                     }
 
@@ -323,12 +323,12 @@ public class LoadTestService {
             log.debug("Failed to poll PG stats", e);
         }
 
-        if (mssqlVideoChunkRepository != null) {
+        if (pg2VideoChunkRepository != null) {
             try {
-                statsService.setMssqlRowCount(mssqlVideoChunkRepository.count());
-                statsService.setMssqlSizeBytes(mssqlVideoChunkRepository.getTableSizeBytes());
+                statsService.setPg2RowCount(pg2VideoChunkRepository.count());
+                statsService.setPg2SizeBytes(pg2VideoChunkRepository.getTableSizeBytes());
             } catch (Exception e) {
-                log.debug("Failed to poll MSSQL stats", e);
+                log.debug("Failed to poll PG2 stats", e);
             }
         }
     }

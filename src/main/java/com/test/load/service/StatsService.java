@@ -16,14 +16,14 @@ public class StatsService {
     private final AtomicLong totalOps = new AtomicLong();
     private final AtomicLong pgInserts = new AtomicLong();
     private final AtomicLong pgReads = new AtomicLong();
-    private final AtomicLong mssqlInserts = new AtomicLong();
-    private final AtomicLong mssqlReads = new AtomicLong();
+    private final AtomicLong pg2Inserts = new AtomicLong();
+    private final AtomicLong pg2Reads = new AtomicLong();
     private final AtomicLong totalBytesProcessed = new AtomicLong();
     private final AtomicLong errors = new AtomicLong();
     private final AtomicInteger activeThreads = new AtomicInteger();
 
     private volatile boolean running = false;
-    private volatile boolean mssqlEnabled = false;
+    private volatile boolean pg2Enabled = false;
     private volatile long startTime = 0;
     private volatile int threadCount = 100;
     private volatile int chunkSizeMb = 10;
@@ -31,12 +31,12 @@ public class StatsService {
     private volatile long videoSize = 0;
     private volatile long pgRowCount = 0;
     private volatile long pgSizeBytes = 0;
-    private volatile long mssqlRowCount = 0;
-    private volatile long mssqlSizeBytes = 0;
+    private volatile long pg2RowCount = 0;
+    private volatile long pg2SizeBytes = 0;
     private volatile long pgMaxBytes = 0;
-    private volatile long mssqlMaxBytes = 0;
+    private volatile long pg2MaxBytes = 0;
 
-    private long lastOps, lastPgInserts, lastPgReads, lastMssqlInserts, lastMssqlReads, lastBytes;
+    private long lastOps, lastPgInserts, lastPgReads, lastPg2Inserts, lastPg2Reads, lastBytes;
     private long lastTimestamp = System.currentTimeMillis();
 
     private final OperatingSystemMXBean osMxBean;
@@ -50,15 +50,15 @@ public class StatsService {
     public void incrementTotalOps() { totalOps.incrementAndGet(); }
     public void incrementPgInserts() { pgInserts.incrementAndGet(); }
     public void incrementPgReads() { pgReads.incrementAndGet(); }
-    public void incrementMssqlInserts() { mssqlInserts.incrementAndGet(); }
-    public void incrementMssqlReads() { mssqlReads.incrementAndGet(); }
+    public void incrementPg2Inserts() { pg2Inserts.incrementAndGet(); }
+    public void incrementPg2Reads() { pg2Reads.incrementAndGet(); }
     public void incrementErrors() { errors.incrementAndGet(); }
     public void addBytesProcessed(long bytes) { totalBytesProcessed.addAndGet(bytes); }
     public void incrementActiveThreads() { activeThreads.incrementAndGet(); }
     public void decrementActiveThreads() { activeThreads.decrementAndGet(); }
 
     public void setRunning(boolean running) { this.running = running; }
-    public void setMssqlEnabled(boolean enabled) { this.mssqlEnabled = enabled; }
+    public void setPg2Enabled(boolean enabled) { this.pg2Enabled = enabled; }
     public void setStartTime(long startTime) { this.startTime = startTime; }
     public void setThreadCount(int threadCount) { this.threadCount = threadCount; }
     public void setChunkSizeMb(int chunkSizeMb) { this.chunkSizeMb = chunkSizeMb; }
@@ -66,26 +66,26 @@ public class StatsService {
     public void setVideoSize(long videoSize) { this.videoSize = videoSize; }
     public void setPgRowCount(long count) { this.pgRowCount = count; }
     public void setPgSizeBytes(long size) { this.pgSizeBytes = size; }
-    public void setMssqlRowCount(long count) { this.mssqlRowCount = count; }
-    public void setMssqlSizeBytes(long size) { this.mssqlSizeBytes = size; }
+    public void setPg2RowCount(long count) { this.pg2RowCount = count; }
+    public void setPg2SizeBytes(long size) { this.pg2SizeBytes = size; }
     public void setPgMaxBytes(long size) { this.pgMaxBytes = size; }
-    public void setMssqlMaxBytes(long size) { this.mssqlMaxBytes = size; }
+    public void setPg2MaxBytes(long size) { this.pg2MaxBytes = size; }
     public boolean isRunning() { return running; }
 
     public void reset() {
         totalOps.set(0);
         pgInserts.set(0);
         pgReads.set(0);
-        mssqlInserts.set(0);
-        mssqlReads.set(0);
+        pg2Inserts.set(0);
+        pg2Reads.set(0);
         totalBytesProcessed.set(0);
         errors.set(0);
         activeThreads.set(0);
         lastOps = 0;
         lastPgInserts = 0;
         lastPgReads = 0;
-        lastMssqlInserts = 0;
-        lastMssqlReads = 0;
+        lastPg2Inserts = 0;
+        lastPg2Reads = 0;
         lastBytes = 0;
         lastTimestamp = System.currentTimeMillis();
     }
@@ -99,8 +99,8 @@ public class StatsService {
         long curOps = totalOps.get();
         long curPgIns = pgInserts.get();
         long curPgRds = pgReads.get();
-        long curMsIns = mssqlInserts.get();
-        long curMsRds = mssqlReads.get();
+        long curPg2Ins = pg2Inserts.get();
+        long curPg2Rds = pg2Reads.get();
         long curBytes = totalBytesProcessed.get();
 
         Map<String, Object> stats = new LinkedHashMap<>();
@@ -124,12 +124,12 @@ public class StatsService {
         stats.put("pgSizeBytes", pgSizeBytes);
         stats.put("pgMaxBytes", pgMaxBytes);
 
-        stats.put("mssqlEnabled", mssqlEnabled);
-        stats.put("mssqlInsertsPerSecond", Math.round((curMsIns - lastMssqlInserts) * factor * 10.0) / 10.0);
-        stats.put("mssqlReadsPerSecond", Math.round((curMsRds - lastMssqlReads) * factor * 10.0) / 10.0);
-        stats.put("mssqlRowCount", mssqlRowCount);
-        stats.put("mssqlSizeBytes", mssqlSizeBytes);
-        stats.put("mssqlMaxBytes", mssqlMaxBytes);
+        stats.put("pg2Enabled", pg2Enabled);
+        stats.put("pg2InsertsPerSecond", Math.round((curPg2Ins - lastPg2Inserts) * factor * 10.0) / 10.0);
+        stats.put("pg2ReadsPerSecond", Math.round((curPg2Rds - lastPg2Reads) * factor * 10.0) / 10.0);
+        stats.put("pg2RowCount", pg2RowCount);
+        stats.put("pg2SizeBytes", pg2SizeBytes);
+        stats.put("pg2MaxBytes", pg2MaxBytes);
 
         stats.put("bytesPerSecond", Math.round((curBytes - lastBytes) * factor));
         stats.put("totalBytesProcessed", curBytes);
@@ -150,8 +150,8 @@ public class StatsService {
         lastOps = curOps;
         lastPgInserts = curPgIns;
         lastPgReads = curPgRds;
-        lastMssqlInserts = curMsIns;
-        lastMssqlReads = curMsRds;
+        lastPg2Inserts = curPg2Ins;
+        lastPg2Reads = curPg2Rds;
         lastBytes = curBytes;
         lastTimestamp = now;
 

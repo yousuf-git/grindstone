@@ -21,7 +21,7 @@
         body { background: #0b0f1a; font-family: 'Inter', system-ui, sans-serif; }
         .card { background: linear-gradient(135deg, rgba(30,41,59,0.8), rgba(17,24,39,0.9)); border: 1px solid rgba(99,102,241,0.15); }
         .card-pg { border-color: rgba(52,211,153,0.25); }
-        .card-mssql { border-color: rgba(251,146,60,0.25); }
+        .card-pg2 { border-color: rgba(96,165,250,0.25); }
         .glow { box-shadow: 0 0 20px rgba(99,102,241,0.1); }
         .stat-value { font-variant-numeric: tabular-nums; }
         @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -112,15 +112,15 @@
             <div class="mt-1.5 w-full bg-dark-900 rounded-full h-1.5"><div id="bar-pg" class="h-1.5 rounded-full bg-emerald-500 transition-all" style="width:0%"></div></div>
             <div id="stat-pg-cap" class="text-xs text-gray-600 mt-1">/ 0 B</div>
         </div>
-        <div class="card card-mssql rounded-xl p-4 text-center" id="card-mssql-rows">
-            <div class="text-xs text-orange-500 mb-1">MySQL Rows</div>
-            <div id="stat-mssql-rows" class="text-2xl font-bold text-orange-400 stat-value">0</div>
+        <div class="card card-pg2 rounded-xl p-4 text-center" id="card-pg2-rows">
+            <div class="text-xs text-blue-400 mb-1">PG2 Rows</div>
+            <div id="stat-pg2-rows" class="text-2xl font-bold text-blue-400 stat-value">0</div>
         </div>
-        <div class="card card-mssql rounded-xl p-4 text-center" id="card-mssql-size">
-            <div class="text-xs text-orange-500 mb-1">MySQL Storage</div>
-            <div id="stat-mssql-size" class="text-2xl font-bold text-orange-300 stat-value">0 B</div>
-            <div class="mt-1.5 w-full bg-dark-900 rounded-full h-1.5"><div id="bar-mssql" class="h-1.5 rounded-full bg-orange-500 transition-all" style="width:0%"></div></div>
-            <div id="stat-mssql-cap" class="text-xs text-gray-600 mt-1">/ 0 B</div>
+        <div class="card card-pg2 rounded-xl p-4 text-center" id="card-pg2-size">
+            <div class="text-xs text-blue-400 mb-1">PG2 Storage</div>
+            <div id="stat-pg2-size" class="text-2xl font-bold text-blue-300 stat-value">0 B</div>
+            <div class="mt-1.5 w-full bg-dark-900 rounded-full h-1.5"><div id="bar-pg2" class="h-1.5 rounded-full bg-blue-500 transition-all" style="width:0%"></div></div>
+            <div id="stat-pg2-cap" class="text-xs text-gray-600 mt-1">/ 0 B</div>
         </div>
         <div class="card rounded-xl p-4 text-center">
             <div class="text-xs text-gray-500 mb-1">Errors</div>
@@ -140,15 +140,15 @@
         </div>
     </div>
 
-    <!-- Charts Row 2: PG + MSSQL -->
+    <!-- Charts Row 2: PG + PG2 -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <div class="card card-pg rounded-xl p-4">
             <h3 class="text-sm font-semibold text-emerald-400 mb-3">PostgreSQL Ops/sec</h3>
             <div class="relative" style="height:220px"><canvas id="chart-pg"></canvas></div>
         </div>
-        <div class="card card-mssql rounded-xl p-4" id="card-mssql-chart">
-            <h3 class="text-sm font-semibold text-orange-400 mb-3">MySQL Ops/sec</h3>
-            <div class="relative" style="height:220px"><canvas id="chart-mssql"></canvas></div>
+        <div class="card card-pg2 rounded-xl p-4" id="card-pg2-chart">
+            <h3 class="text-sm font-semibold text-blue-400 mb-3">PostgreSQL 2 Ops/sec</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-pg2"></canvas></div>
         </div>
     </div>
 
@@ -171,7 +171,7 @@
             <span>Bytes Processed: <strong id="foot-bytes" class="text-white stat-value">0 B</strong></span>
             <span>Uptime: <strong id="foot-uptime" class="text-white stat-value">00:00:00</strong></span>
             <span class="text-emerald-400">PG: <strong id="foot-pg-ws" class="stat-value">0</strong>w/s <strong id="foot-pg-rs" class="stat-value">0</strong>r/s <strong id="foot-pg-rows" class="stat-value">0</strong> rows <strong id="foot-pg-size" class="stat-value">0 B</strong></span>
-            <span class="text-orange-400" id="foot-mssql">MySQL: <strong id="foot-mssql-ws" class="stat-value">0</strong>w/s <strong id="foot-mssql-rs" class="stat-value">0</strong>r/s <strong id="foot-mssql-rows" class="stat-value">0</strong> rows <strong id="foot-mssql-size" class="stat-value">0 B</strong></span>
+            <span class="text-blue-400" id="foot-pg2">PG2: <strong id="foot-pg2-ws" class="stat-value">0</strong>w/s <strong id="foot-pg2-rs" class="stat-value">0</strong>r/s <strong id="foot-pg2-rows" class="stat-value">0</strong> rows <strong id="foot-pg2-size" class="stat-value">0 B</strong></span>
         </div>
     </div>
 </div>
@@ -180,7 +180,7 @@
 const MAX_POINTS = 120;
 let ws = null;
 let testRunning = false;
-let mssqlEnabled = false;
+let pg2Enabled = false;
 
 const chartDefaults = {
     responsive: true,
@@ -234,17 +234,17 @@ const pgChart = new Chart(document.getElementById('chart-pg'), {
     options: { ...chartDefaults, scales: { ...chartDefaults.scales, y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#10b981', font: { size: 10 } } } } }
 });
 
-const mssqlChart = new Chart(document.getElementById('chart-mssql'), {
+const pg2Chart = new Chart(document.getElementById('chart-pg2'), {
     type: 'line',
     data: {
         labels: makeLabels(),
         datasets: [
-            { label: 'MySQL Writes/s', data: makeData(), borderColor: '#fb923c', backgroundColor: 'rgba(251,146,60,0.1)', fill: true },
-            { label: 'MySQL Reads/s', data: makeData(), borderColor: '#fdba74', backgroundColor: 'rgba(253,186,116,0.1)', fill: true },
-            { label: 'MySQL Size (MB)', data: makeData(), borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', fill: false, yAxisID: 'y1' }
+            { label: 'PG2 Writes/s', data: makeData(), borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.1)', fill: true },
+            { label: 'PG2 Reads/s', data: makeData(), borderColor: '#93c5fd', backgroundColor: 'rgba(147,197,253,0.1)', fill: true },
+            { label: 'PG2 Size (MB)', data: makeData(), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, yAxisID: 'y1' }
         ]
     },
-    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#f97316', font: { size: 10 } } } } }
+    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#3b82f6', font: { size: 10 } } } } }
 });
 
 const throughputChart = new Chart(document.getElementById('chart-throughput'), {
@@ -264,7 +264,7 @@ const dbSizeChart = new Chart(document.getElementById('chart-dbsize'), {
         labels: makeLabels(),
         datasets: [
             { label: 'PG Size (MB)', data: makeData(), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.1)', fill: true },
-            { label: 'MySQL Size (MB)', data: makeData(), borderColor: '#fb923c', backgroundColor: 'rgba(251,146,60,0.1)', fill: true }
+            { label: 'PG2 Size (MB)', data: makeData(), borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.1)', fill: true }
         ]
     },
     options: chartDefaults
@@ -295,11 +295,11 @@ function fmtTime(sec) {
     return `${h}:${m}:${s}`;
 }
 
-function updateMssqlVisibility(enabled) {
-    if (mssqlEnabled === enabled) return;
-    mssqlEnabled = enabled;
-    const mssqlEls = ['card-mssql-rows', 'card-mssql-size', 'card-mssql-chart', 'foot-mssql'];
-    mssqlEls.forEach(id => {
+function updatePg2Visibility(enabled) {
+    if (pg2Enabled === enabled) return;
+    pg2Enabled = enabled;
+    const pg2Els = ['card-pg2-rows', 'card-pg2-size', 'card-pg2-chart', 'foot-pg2'];
+    pg2Els.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.opacity = enabled ? '1' : '0.3';
     });
@@ -324,15 +324,15 @@ function updateUI(d) {
         document.getElementById('stat-pg-cap').textContent = fmtBytes(d.pgSizeBytes || 0) + ' / ' + fmtBytes(d.pgMaxBytes) + ' (' + pct.toFixed(1) + '%)';
     }
 
-    // MSSQL stats
-    updateMssqlVisibility(d.mssqlEnabled || false);
-    document.getElementById('stat-mssql-rows').textContent = (d.mssqlRowCount || 0).toLocaleString();
-    document.getElementById('stat-mssql-size').textContent = fmtBytes(d.mssqlSizeBytes || 0);
-    if (d.mssqlMaxBytes > 0) {
-        const pct = Math.min(100, (d.mssqlSizeBytes || 0) / d.mssqlMaxBytes * 100);
-        document.getElementById('bar-mssql').style.width = pct.toFixed(1) + '%';
-        document.getElementById('bar-mssql').className = 'h-1.5 rounded-full transition-all ' + (pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-orange-500');
-        document.getElementById('stat-mssql-cap').textContent = fmtBytes(d.mssqlSizeBytes || 0) + ' / ' + fmtBytes(d.mssqlMaxBytes) + ' (' + pct.toFixed(1) + '%)';
+    // PG2 stats
+    updatePg2Visibility(d.pg2Enabled || false);
+    document.getElementById('stat-pg2-rows').textContent = (d.pg2RowCount || 0).toLocaleString();
+    document.getElementById('stat-pg2-size').textContent = fmtBytes(d.pg2SizeBytes || 0);
+    if (d.pg2MaxBytes > 0) {
+        const pct = Math.min(100, (d.pg2SizeBytes || 0) / d.pg2MaxBytes * 100);
+        document.getElementById('bar-pg2').style.width = pct.toFixed(1) + '%';
+        document.getElementById('bar-pg2').className = 'h-1.5 rounded-full transition-all ' + (pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-blue-500');
+        document.getElementById('stat-pg2-cap').textContent = fmtBytes(d.pg2SizeBytes || 0) + ' / ' + fmtBytes(d.pg2MaxBytes) + ' (' + pct.toFixed(1) + '%)';
     }
 
     // Footer
@@ -345,10 +345,10 @@ function updateUI(d) {
     document.getElementById('foot-pg-rows').textContent = (d.pgRowCount || 0).toLocaleString();
     document.getElementById('foot-pg-size').textContent = fmtBytes(d.pgSizeBytes || 0);
 
-    document.getElementById('foot-mssql-ws').textContent = d.mssqlInsertsPerSecond || 0;
-    document.getElementById('foot-mssql-rs').textContent = d.mssqlReadsPerSecond || 0;
-    document.getElementById('foot-mssql-rows').textContent = (d.mssqlRowCount || 0).toLocaleString();
-    document.getElementById('foot-mssql-size').textContent = fmtBytes(d.mssqlSizeBytes || 0);
+    document.getElementById('foot-pg2-ws').textContent = d.pg2InsertsPerSecond || 0;
+    document.getElementById('foot-pg2-rs').textContent = d.pg2ReadsPerSecond || 0;
+    document.getElementById('foot-pg2-rows').textContent = (d.pg2RowCount || 0).toLocaleString();
+    document.getElementById('foot-pg2-size').textContent = fmtBytes(d.pg2SizeBytes || 0);
 
     if (d.videoPath) {
         document.getElementById('video-info').textContent = d.videoPath + (d.videoSize ? ' (' + fmtBytes(d.videoSize) + ')' : '');
@@ -365,14 +365,14 @@ function updateUI(d) {
     pushPoint(pgChart, 1, d.pgReadsPerSecond || 0);
     pushPoint(pgChart, 2, (d.pgSizeBytes || 0) / 1048576);
 
-    pushPoint(mssqlChart, 0, d.mssqlInsertsPerSecond || 0);
-    pushPoint(mssqlChart, 1, d.mssqlReadsPerSecond || 0);
-    pushPoint(mssqlChart, 2, (d.mssqlSizeBytes || 0) / 1048576);
+    pushPoint(pg2Chart, 0, d.pg2InsertsPerSecond || 0);
+    pushPoint(pg2Chart, 1, d.pg2ReadsPerSecond || 0);
+    pushPoint(pg2Chart, 2, (d.pg2SizeBytes || 0) / 1048576);
 
     pushPoint(throughputChart, 0, d.bytesPerSecond / 1048576);
 
     pushPoint(dbSizeChart, 0, (d.pgSizeBytes || 0) / 1048576);
-    pushPoint(dbSizeChart, 1, (d.mssqlSizeBytes || 0) / 1048576);
+    pushPoint(dbSizeChart, 1, (d.pg2SizeBytes || 0) / 1048576);
 
     testRunning = d.running;
     updateButton();

@@ -8,11 +8,10 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.6-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Hibernate](https://img.shields.io/badge/Hibernate-7-59666C?logo=hibernate&logoColor=white)](https://hibernate.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![Heroku](https://img.shields.io/badge/Heroku-Deployed-430098?logo=heroku&logoColor=white)](https://heroku.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Grinds CPU, RAM, and dual databases simultaneously with configurable multi-threaded workers.\
+Grinds CPU, RAM, and dual PostgreSQL databases simultaneously with configurable multi-threaded workers.\
 Real-time dashboard. Persistent writes. No deletes. Databases grow until you pull the plug.
 
 ---
@@ -32,9 +31,9 @@ READ chunk from video file
     |
 HASH with SHA-256 (N rounds)
     |
-WRITE to PostgreSQL ----+---- WRITE to MySQL
-    |                         |
-READ BACK + verify hash  READ BACK + verify hash
+WRITE to PostgreSQL 1 ---+--- WRITE to PostgreSQL 2
+    |                          |
+READ BACK + verify hash   READ BACK + verify hash
     |
 MATRIX MULTIPLY (CPU burn)
     |
@@ -55,9 +54,9 @@ The built-in dashboard at `/` streams metrics over WebSocket at 1-second interva
 |:---|:---|
 | **System** | CPU (system + process), heap used / max, non-heap |
 | **PostgreSQL** | Rows, DB size, writes/s, reads/s |
-| **MySQL** | Rows, DB size, writes/s, reads/s |
+| **PostgreSQL 2** | Rows, DB size, writes/s, reads/s |
 | **Throughput** | MB/s processed, total bytes |
-| **DB Size Growth** | Side-by-side PG vs MySQL size over time |
+| **DB Size Growth** | Side-by-side PG vs PG2 size over time |
 | **Controls** | Start/Stop, thread count, chunk size |
 
 ---
@@ -68,8 +67,8 @@ The built-in dashboard at `/` streams metrics over WebSocket at 1-second interva
 |:---|:---|
 | Runtime | `Java 21` / `OpenJDK` |
 | Framework | `Spring Boot 4.0.6` / `Hibernate ORM 7` |
-| Primary DB | `PostgreSQL 17` via Heroku Postgres |
-| Secondary DB | `MySQL` via JawsDB Maria |
+| Primary DB | `PostgreSQL` via SchemaToGo |
+| Secondary DB | `PostgreSQL` via SchemaToGo |
 | Connection Pool | `HikariCP` (dual pools) |
 | Real-time | `WebSocket` (1s push interval) |
 | Frontend | `TailwindCSS` / `Chart.js 4` |
@@ -97,22 +96,26 @@ The built-in dashboard at `/` streams metrics over WebSocket at 1-second interva
 | `LOADTEST_GENERATE` | `false` | Generate synthetic video if missing |
 | `LOADTEST_GENERATE_SIZE_MB` | `100` | Generated file size |
 
-#### PostgreSQL
+#### PostgreSQL (Primary)
 
 | Variable | Default | Description |
 |:---|:---:|:---|
-| `JDBC_DATABASE_URL` | localhost | Set automatically by Heroku |
+| `PG_URL` | localhost | JDBC connection string |
+| `PG_USERNAME` | postgres | Database user |
+| `PG_PASSWORD` | postgres | Database password |
 | `HIKARI_MAX_POOL` | `4` | PG connection pool size |
+| `PG_MAX_BYTES` | 3TiB | Storage capacity (bytes) |
 
-#### MySQL (Secondary)
+#### PostgreSQL 2 (Secondary)
 
 | Variable | Default | Description |
 |:---|:---:|:---|
-| `MYSQL_ENABLED` | `false` | Activate dual-database mode |
-| `MYSQL_URL` | -- | JDBC connection string |
-| `MYSQL_USERNAME` | -- | Database user |
-| `MYSQL_PASSWORD` | -- | Database password |
-| `MYSQL_HIKARI_MAX_POOL` | `4` | MySQL connection pool size |
+| `PG2_ENABLED` | `false` | Activate dual-database mode |
+| `PG2_URL` | -- | JDBC connection string |
+| `PG2_USERNAME` | -- | Database user |
+| `PG2_PASSWORD` | -- | Database password |
+| `PG2_HIKARI_MAX_POOL` | `4` | PG2 connection pool size |
+| `PG2_MAX_BYTES` | 3TiB | Storage capacity (bytes) |
 
 </details>
 
@@ -123,8 +126,8 @@ The built-in dashboard at `/` streams metrics over WebSocket at 1-second interva
 ```bash
 # Create app + databases
 heroku create grindstone-app
-heroku addons:create heroku-postgresql:standard-2
-heroku addons:create jawsdb-maria:extended
+heroku addons:create schematogo:premium-10
+heroku addons:create schematogo:premium-10
 
 # Configure per-dyno resources (scale as needed)
 heroku config:set \
@@ -136,13 +139,19 @@ heroku config:set \
   LOADTEST_GENERATE=true \
   JAVA_OPTS="-Xmx300m -Xms200m" \
   DDL_AUTO=update \
-  MYSQL_ENABLED=true
+  PG2_ENABLED=true
 
-# Set MySQL credentials (parse from JAWSDB_MARIA_URL)
+# Set PG credentials (from SchemaToGo addon config)
 heroku config:set \
-  MYSQL_URL="jdbc:mysql://HOST:PORT/DB?useSSL=true&serverTimezone=UTC" \
-  MYSQL_USERNAME=user \
-  MYSQL_PASSWORD=pass
+  PG_URL="jdbc:postgresql://HOST:PORT/DB" \
+  PG_USERNAME=user \
+  PG_PASSWORD=pass
+
+# Set PG2 credentials (from second SchemaToGo addon)
+heroku config:set \
+  PG2_URL="jdbc:postgresql://HOST:PORT/DB" \
+  PG2_USERNAME=user \
+  PG2_PASSWORD=pass
 
 # Deploy and scale
 git push heroku main
@@ -161,17 +170,17 @@ src/main/java/com/test/load/
 |
 +-- config/
 |   +-- PostgresDataSourceConfig    Primary datasource + EntityManager
-|   +-- MssqlDataSourceConfig       Secondary datasource (conditional)
+|   +-- Pg2DataSourceConfig         Secondary datasource (conditional)
 |   +-- WebSocketConfig             /ws/stats endpoint
 |   +-- FileInitializer             Synthetic video generator
 |
 +-- entity/
 |   +-- pg/PgVideoChunk             PostgreSQL entity (bytea)
-|   +-- mssql/MssqlVideoChunk       MySQL entity (LONGBLOB)
+|   +-- pg2/Pg2VideoChunk           PostgreSQL 2 entity (bytea)
 |
 +-- repository/
 |   +-- pg/PgVideoChunkRepository
-|   +-- mssql/MssqlVideoChunkRepository
+|   +-- pg2/Pg2VideoChunkRepository
 |
 +-- service/
 |   +-- LoadTestService             Worker pool, dual-write loop
@@ -219,11 +228,11 @@ WS   /ws/stats         Real-time metrics stream (1s interval)
   "pgSizeBytes": 223479092915,
   "pgInsertsPerSecond": 4.2,
   "pgReadsPerSecond": 4.2,
-  "mssqlEnabled": true,
-  "mssqlRowCount": 21217,
-  "mssqlSizeBytes": 21454405632,
-  "mssqlInsertsPerSecond": 4.1,
-  "mssqlReadsPerSecond": 4.1,
+  "pg2Enabled": true,
+  "pg2RowCount": 21217,
+  "pg2SizeBytes": 21454405632,
+  "pg2InsertsPerSecond": 4.1,
+  "pg2ReadsPerSecond": 4.1,
   "activeThreads": 4,
   "errors": 0,
   "running": true

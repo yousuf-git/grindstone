@@ -20,43 +20,43 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
-@ConditionalOnProperty(name = "app.datasource.mysql.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.datasource.pg2.enabled", havingValue = "true")
 @EnableJpaRepositories(
-    basePackages = "com.test.load.repository.mssql",
-    entityManagerFactoryRef = "mssqlEntityManagerFactory",
-    transactionManagerRef = "mssqlTransactionManager"
+    basePackages = "com.test.load.repository.pg2",
+    entityManagerFactoryRef = "pg2EntityManagerFactory",
+    transactionManagerRef = "pg2TransactionManager"
 )
-public class MssqlDataSourceConfig {
+public class Pg2DataSourceConfig {
 
     @Value("${spring.jpa.hibernate.ddl-auto:update}")
     private String ddlAuto;
 
     @Bean
-    @ConfigurationProperties("app.datasource.mysql")
-    public DataSourceProperties mssqlDataSourceProperties() {
+    @ConfigurationProperties("app.datasource.pg2")
+    public DataSourceProperties pg2DataSourceProperties() {
         return new DataSourceProperties();
     }
 
     @Bean
-    @ConfigurationProperties("app.datasource.mysql.hikari")
-    public HikariDataSource mssqlDataSource() {
-        return mssqlDataSourceProperties()
+    @ConfigurationProperties("app.datasource.pg2.hikari")
+    public HikariDataSource pg2DataSource() {
+        return pg2DataSourceProperties()
             .initializeDataSourceBuilder()
             .type(HikariDataSource.class)
             .build();
     }
 
     @Bean
-    public LocalContainerEntityManagerFactoryBean mssqlEntityManagerFactory() {
+    public LocalContainerEntityManagerFactoryBean pg2EntityManagerFactory() {
         LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
-        em.setDataSource(mssqlDataSource());
-        em.setPackagesToScan("com.test.load.entity.mssql");
+        em.setDataSource(pg2DataSource());
+        em.setPackagesToScan("com.test.load.entity.pg2");
         em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
-        em.setPersistenceUnitName("mysql");
+        em.setPersistenceUnitName("pg2");
 
         Map<String, Object> props = new HashMap<>();
         props.put("hibernate.hbm2ddl.auto", ddlAuto);
-        props.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
+        props.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
         props.put("hibernate.physical_naming_strategy",
             "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy");
         em.setJpaPropertyMap(props);
@@ -65,8 +65,8 @@ public class MssqlDataSourceConfig {
     }
 
     @Bean
-    public PlatformTransactionManager mssqlTransactionManager(
-            @Qualifier("mssqlEntityManagerFactory") EntityManagerFactory emf) {
+    public PlatformTransactionManager pg2TransactionManager(
+            @Qualifier("pg2EntityManagerFactory") EntityManagerFactory emf) {
         return new JpaTransactionManager(emf);
     }
 }

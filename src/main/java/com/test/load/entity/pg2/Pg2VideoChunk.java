@@ -1,17 +1,17 @@
-package com.test.load.entity.mssql;
+package com.test.load.entity.pg2;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "video_chunk")
-public class MssqlVideoChunk {
+public class Pg2VideoChunk {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(columnDefinition = "LONGBLOB")
+    @Column(columnDefinition = "bytea")
     private byte[] chunkData;
 
     private String hash;
