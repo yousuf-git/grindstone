@@ -4,7 +4,6 @@ import com.test.load.entity.pg3.Pg3VideoChunk;
 import com.test.load.entity.pg4.Pg4VideoChunk;
 import com.test.load.entity.pg5.Pg5VideoChunk;
 import com.test.load.repository.pg.PgVideoChunkRepository;
-import com.test.load.repository.pg2.Pg2VideoChunkRepository;
 import com.test.load.repository.pg3.Pg3VideoChunkRepository;
 import com.test.load.repository.pg4.Pg4VideoChunkRepository;
 import com.test.load.repository.pg5.Pg5VideoChunkRepository;
@@ -39,11 +38,9 @@ public class LoadTestService {
     private final StatsWebSocketHandler webSocketHandler;
     private final ObjectMapper objectMapper;
 
-    // Stopped databases (stats-only, no writes)
+    // PG1 primary datasource — retained as the @Primary bean but dropped from the
+    // load test (not polled, not shown). Keeps Spring DI happy without touching the DB.
     private final PgVideoChunkRepository pgVideoChunkRepository;
-
-    @Autowired(required = false)
-    private Pg2VideoChunkRepository pg2VideoChunkRepository;
 
     // Active databases (full write/read load)
     @Autowired(required = false)
@@ -76,12 +73,6 @@ public class LoadTestService {
     @Value("${loadtest.auto-start:false}")
     private boolean autoStart;
 
-    @Value("${app.storage.pg-max-bytes:0}")
-    private long pgMaxBytes;
-
-    @Value("${app.storage.pg2-max-bytes:0}")
-    private long pg2MaxBytes;
-
     @Value("${app.storage.pg3-max-bytes:0}")
     private long pg3MaxBytes;
 
@@ -112,27 +103,20 @@ public class LoadTestService {
 
     @PostConstruct
     public void init() {
-        // Register databases in display order. Stopped first, then active.
-        statsService.registerDb("pg", "PG1", false);
-        statsService.registerDb("pg2", "PG2", false);
+        // Active databases only. PG1/PG2 dropped (not registered, not polled, not shown).
         statsService.registerDb("pg3", "Purple", true);
         statsService.registerDb("pg4", "Amber", true);
         statsService.registerDb("pg5", "Olive", true);
 
-        statsService.setEnabled("pg", true);
-        statsService.setEnabled("pg2", pg2VideoChunkRepository != null);
         statsService.setEnabled("pg3", pg3VideoChunkRepository != null);
         statsService.setEnabled("pg4", pg4VideoChunkRepository != null);
         statsService.setEnabled("pg5", pg5VideoChunkRepository != null);
 
-        statsService.setMaxBytes("pg", pgMaxBytes);
-        statsService.setMaxBytes("pg2", pg2MaxBytes);
         statsService.setMaxBytes("pg3", pg3MaxBytes);
         statsService.setMaxBytes("pg4", pg4MaxBytes);
         statsService.setMaxBytes("pg5", pg5MaxBytes);
 
-        log.info("Databases — stopped: PG1=true, PG2={}; active: Purple={}, Amber={}, Olive={}",
-            pg2VideoChunkRepository != null,
+        log.info("Active databases: Purple={}, Amber={}, Olive={} (PG1/PG2 dropped)",
             pg3VideoChunkRepository != null, pg4VideoChunkRepository != null, pg5VideoChunkRepository != null);
 
         statsScheduler = Executors.newSingleThreadScheduledExecutor();
@@ -372,10 +356,6 @@ public class LoadTestService {
     }
 
     private void pollDbStats() {
-        pollOne("pg", pgVideoChunkRepository::count, pgVideoChunkRepository::getTableSizeBytes);
-        if (pg2VideoChunkRepository != null) {
-            pollOne("pg2", pg2VideoChunkRepository::count, pg2VideoChunkRepository::getTableSizeBytes);
-        }
         if (pg3VideoChunkRepository != null) {
             pollOne("pg3", pg3VideoChunkRepository::count, pg3VideoChunkRepository::getTableSizeBytes);
         }
