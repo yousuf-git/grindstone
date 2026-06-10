@@ -5,7 +5,9 @@ import org.springframework.stereotype.Service;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -13,30 +15,42 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 public class StatsService {
 
+    /** Per-database counters and gauges. */
+    public static class DbStats {
+        final String key;
+        final String label;
+        final boolean active; // true = participates in write/read load; false = stats-only (stopped)
+        final AtomicLong inserts = new AtomicLong();
+        final AtomicLong reads = new AtomicLong();
+        volatile boolean enabled = false;
+        volatile long rowCount = 0;
+        volatile long sizeBytes = 0;
+        volatile long maxBytes = 0;
+        long lastInserts = 0;
+        long lastReads = 0;
+
+        DbStats(String key, String label, boolean active) {
+            this.key = key;
+            this.label = label;
+            this.active = active;
+        }
+    }
+
+    private final Map<String, DbStats> dbs = new LinkedHashMap<>();
+
     private final AtomicLong totalOps = new AtomicLong();
-    private final AtomicLong pgInserts = new AtomicLong();
-    private final AtomicLong pgReads = new AtomicLong();
-    private final AtomicLong pg2Inserts = new AtomicLong();
-    private final AtomicLong pg2Reads = new AtomicLong();
     private final AtomicLong totalBytesProcessed = new AtomicLong();
     private final AtomicLong errors = new AtomicLong();
     private final AtomicInteger activeThreads = new AtomicInteger();
 
     private volatile boolean running = false;
-    private volatile boolean pg2Enabled = false;
     private volatile long startTime = 0;
-    private volatile int threadCount = 100;
+    private volatile int threadCount = 20;
     private volatile int chunkSizeMb = 10;
     private volatile String videoPath = "";
     private volatile long videoSize = 0;
-    private volatile long pgRowCount = 0;
-    private volatile long pgSizeBytes = 0;
-    private volatile long pg2RowCount = 0;
-    private volatile long pg2SizeBytes = 0;
-    private volatile long pgMaxBytes = 0;
-    private volatile long pg2MaxBytes = 0;
 
-    private long lastOps, lastPgInserts, lastPgReads, lastPg2Inserts, lastPg2Reads, lastBytes;
+    private long lastOps, lastBytes;
     private long lastTimestamp = System.currentTimeMillis();
 
     private final OperatingSystemMXBean osMxBean;
@@ -47,46 +61,51 @@ public class StatsService {
         this.memoryMxBean = ManagementFactory.getMemoryMXBean();
     }
 
+    /** Register a database. Order of registration = display order. */
+    public void registerDb(String key, String label, boolean active) {
+        dbs.computeIfAbsent(key, k -> new DbStats(key, label, active));
+    }
+
+    private DbStats db(String key) {
+        DbStats d = dbs.get(key);
+        if (d == null) throw new IllegalArgumentException("Unknown db key: " + key);
+        return d;
+    }
+
     public void incrementTotalOps() { totalOps.incrementAndGet(); }
-    public void incrementPgInserts() { pgInserts.incrementAndGet(); }
-    public void incrementPgReads() { pgReads.incrementAndGet(); }
-    public void incrementPg2Inserts() { pg2Inserts.incrementAndGet(); }
-    public void incrementPg2Reads() { pg2Reads.incrementAndGet(); }
     public void incrementErrors() { errors.incrementAndGet(); }
     public void addBytesProcessed(long bytes) { totalBytesProcessed.addAndGet(bytes); }
     public void incrementActiveThreads() { activeThreads.incrementAndGet(); }
     public void decrementActiveThreads() { activeThreads.decrementAndGet(); }
 
+    public void incrementInserts(String key) { db(key).inserts.incrementAndGet(); }
+    public void incrementReads(String key) { db(key).reads.incrementAndGet(); }
+    public void setEnabled(String key, boolean enabled) { db(key).enabled = enabled; }
+    public void setRowCount(String key, long count) { db(key).rowCount = count; }
+    public void setSizeBytes(String key, long size) { db(key).sizeBytes = size; }
+    public void setMaxBytes(String key, long size) { db(key).maxBytes = size; }
+
     public void setRunning(boolean running) { this.running = running; }
-    public void setPg2Enabled(boolean enabled) { this.pg2Enabled = enabled; }
     public void setStartTime(long startTime) { this.startTime = startTime; }
     public void setThreadCount(int threadCount) { this.threadCount = threadCount; }
     public void setChunkSizeMb(int chunkSizeMb) { this.chunkSizeMb = chunkSizeMb; }
     public void setVideoPath(String videoPath) { this.videoPath = videoPath; }
     public void setVideoSize(long videoSize) { this.videoSize = videoSize; }
-    public void setPgRowCount(long count) { this.pgRowCount = count; }
-    public void setPgSizeBytes(long size) { this.pgSizeBytes = size; }
-    public void setPg2RowCount(long count) { this.pg2RowCount = count; }
-    public void setPg2SizeBytes(long size) { this.pg2SizeBytes = size; }
-    public void setPgMaxBytes(long size) { this.pgMaxBytes = size; }
-    public void setPg2MaxBytes(long size) { this.pg2MaxBytes = size; }
     public boolean isRunning() { return running; }
 
     public void reset() {
         totalOps.set(0);
-        pgInserts.set(0);
-        pgReads.set(0);
-        pg2Inserts.set(0);
-        pg2Reads.set(0);
         totalBytesProcessed.set(0);
         errors.set(0);
         activeThreads.set(0);
         lastOps = 0;
-        lastPgInserts = 0;
-        lastPgReads = 0;
-        lastPg2Inserts = 0;
-        lastPg2Reads = 0;
         lastBytes = 0;
+        for (DbStats d : dbs.values()) {
+            d.inserts.set(0);
+            d.reads.set(0);
+            d.lastInserts = 0;
+            d.lastReads = 0;
+        }
         lastTimestamp = System.currentTimeMillis();
     }
 
@@ -97,10 +116,6 @@ public class StatsService {
         double factor = 1000.0 / elapsed;
 
         long curOps = totalOps.get();
-        long curPgIns = pgInserts.get();
-        long curPgRds = pgReads.get();
-        long curPg2Ins = pg2Inserts.get();
-        long curPg2Rds = pg2Reads.get();
         long curBytes = totalBytesProcessed.get();
 
         Map<String, Object> stats = new LinkedHashMap<>();
@@ -118,18 +133,28 @@ public class StatsService {
         stats.put("totalOps", curOps);
         stats.put("opsPerSecond", Math.round((curOps - lastOps) * factor * 10.0) / 10.0);
 
-        stats.put("pgInsertsPerSecond", Math.round((curPgIns - lastPgInserts) * factor * 10.0) / 10.0);
-        stats.put("pgReadsPerSecond", Math.round((curPgRds - lastPgReads) * factor * 10.0) / 10.0);
-        stats.put("pgRowCount", pgRowCount);
-        stats.put("pgSizeBytes", pgSizeBytes);
-        stats.put("pgMaxBytes", pgMaxBytes);
+        // Per-database stats as ordered list
+        List<Map<String, Object>> dbList = new ArrayList<>();
+        for (DbStats d : dbs.values()) {
+            long curIns = d.inserts.get();
+            long curRds = d.reads.get();
 
-        stats.put("pg2Enabled", pg2Enabled);
-        stats.put("pg2InsertsPerSecond", Math.round((curPg2Ins - lastPg2Inserts) * factor * 10.0) / 10.0);
-        stats.put("pg2ReadsPerSecond", Math.round((curPg2Rds - lastPg2Reads) * factor * 10.0) / 10.0);
-        stats.put("pg2RowCount", pg2RowCount);
-        stats.put("pg2SizeBytes", pg2SizeBytes);
-        stats.put("pg2MaxBytes", pg2MaxBytes);
+            Map<String, Object> dbMap = new LinkedHashMap<>();
+            dbMap.put("key", d.key);
+            dbMap.put("label", d.label);
+            dbMap.put("active", d.active);
+            dbMap.put("enabled", d.enabled);
+            dbMap.put("insertsPerSecond", Math.round((curIns - d.lastInserts) * factor * 10.0) / 10.0);
+            dbMap.put("readsPerSecond", Math.round((curRds - d.lastReads) * factor * 10.0) / 10.0);
+            dbMap.put("rowCount", d.rowCount);
+            dbMap.put("sizeBytes", d.sizeBytes);
+            dbMap.put("maxBytes", d.maxBytes);
+            dbList.add(dbMap);
+
+            d.lastInserts = curIns;
+            d.lastReads = curRds;
+        }
+        stats.put("databases", dbList);
 
         stats.put("bytesPerSecond", Math.round((curBytes - lastBytes) * factor));
         stats.put("totalBytesProcessed", curBytes);
@@ -148,10 +173,6 @@ public class StatsService {
         }
 
         lastOps = curOps;
-        lastPgInserts = curPgIns;
-        lastPgReads = curPgRds;
-        lastPg2Inserts = curPg2Ins;
-        lastPg2Reads = curPg2Rds;
         lastBytes = curBytes;
         lastTimestamp = now;
 

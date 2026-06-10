@@ -1,9 +1,13 @@
 package com.test.load.service;
 
-import com.test.load.entity.pg.PgVideoChunk;
-import com.test.load.entity.pg2.Pg2VideoChunk;
+import com.test.load.entity.pg3.Pg3VideoChunk;
+import com.test.load.entity.pg4.Pg4VideoChunk;
+import com.test.load.entity.pg5.Pg5VideoChunk;
 import com.test.load.repository.pg.PgVideoChunkRepository;
 import com.test.load.repository.pg2.Pg2VideoChunkRepository;
+import com.test.load.repository.pg3.Pg3VideoChunkRepository;
+import com.test.load.repository.pg4.Pg4VideoChunkRepository;
+import com.test.load.repository.pg5.Pg5VideoChunkRepository;
 import com.test.load.websocket.StatsWebSocketHandler;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -31,15 +35,27 @@ public class LoadTestService {
 
     private static final Logger log = LoggerFactory.getLogger(LoadTestService.class);
 
-    private final PgVideoChunkRepository pgVideoChunkRepository;
     private final StatsService statsService;
     private final StatsWebSocketHandler webSocketHandler;
     private final ObjectMapper objectMapper;
 
+    // Stopped databases (stats-only, no writes)
+    private final PgVideoChunkRepository pgVideoChunkRepository;
+
     @Autowired(required = false)
     private Pg2VideoChunkRepository pg2VideoChunkRepository;
 
-    @Value("${loadtest.threads:100}")
+    // Active databases (full write/read load)
+    @Autowired(required = false)
+    private Pg3VideoChunkRepository pg3VideoChunkRepository;
+
+    @Autowired(required = false)
+    private Pg4VideoChunkRepository pg4VideoChunkRepository;
+
+    @Autowired(required = false)
+    private Pg5VideoChunkRepository pg5VideoChunkRepository;
+
+    @Value("${loadtest.threads:20}")
     private int threadCount;
 
     @Value("${loadtest.chunk-size-mb:10}")
@@ -66,6 +82,15 @@ public class LoadTestService {
     @Value("${app.storage.pg2-max-bytes:0}")
     private long pg2MaxBytes;
 
+    @Value("${app.storage.pg3-max-bytes:0}")
+    private long pg3MaxBytes;
+
+    @Value("${app.storage.pg4-max-bytes:0}")
+    private long pg4MaxBytes;
+
+    @Value("${app.storage.pg5-max-bytes:0}")
+    private long pg5MaxBytes;
+
     private ExecutorService workerPool;
     private ScheduledExecutorService statsScheduler;
     private ScheduledExecutorService dbPollScheduler;
@@ -87,18 +112,34 @@ public class LoadTestService {
 
     @PostConstruct
     public void init() {
-        boolean pg2Available = pg2VideoChunkRepository != null;
-        statsService.setPg2Enabled(pg2Available);
-        statsService.setPgMaxBytes(pgMaxBytes);
-        statsService.setPg2MaxBytes(pg2MaxBytes);
-        log.info("PG2 database: {}", pg2Available ? "ENABLED" : "DISABLED");
+        // Register databases in display order. Stopped first, then active.
+        statsService.registerDb("pg", "PG1", false);
+        statsService.registerDb("pg2", "PG2", false);
+        statsService.registerDb("pg3", "Purple", true);
+        statsService.registerDb("pg4", "Amber", true);
+        statsService.registerDb("pg5", "Olive", true);
+
+        statsService.setEnabled("pg", true);
+        statsService.setEnabled("pg2", pg2VideoChunkRepository != null);
+        statsService.setEnabled("pg3", pg3VideoChunkRepository != null);
+        statsService.setEnabled("pg4", pg4VideoChunkRepository != null);
+        statsService.setEnabled("pg5", pg5VideoChunkRepository != null);
+
+        statsService.setMaxBytes("pg", pgMaxBytes);
+        statsService.setMaxBytes("pg2", pg2MaxBytes);
+        statsService.setMaxBytes("pg3", pg3MaxBytes);
+        statsService.setMaxBytes("pg4", pg4MaxBytes);
+        statsService.setMaxBytes("pg5", pg5MaxBytes);
+
+        log.info("Databases — stopped: PG1=true, PG2={}; active: Purple={}, Amber={}, Olive={}",
+            pg2VideoChunkRepository != null,
+            pg3VideoChunkRepository != null, pg4VideoChunkRepository != null, pg5VideoChunkRepository != null);
 
         statsScheduler = Executors.newSingleThreadScheduledExecutor();
         statsScheduler.scheduleAtFixedRate(this::pushStats, 0, 1, TimeUnit.SECONDS);
 
         dbPollScheduler = Executors.newSingleThreadScheduledExecutor();
         dbPollScheduler.scheduleAtFixedRate(this::pollDbStats, 2, 5, TimeUnit.SECONDS);
-
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -130,7 +171,6 @@ public class LoadTestService {
         running = true;
         statsService.reset();
         statsService.setRunning(true);
-        statsService.setPg2Enabled(pg2VideoChunkRepository != null);
         statsService.setStartTime(System.currentTimeMillis());
         statsService.setThreadCount(threadCount);
         statsService.setChunkSizeMb(chunkSizeMb);
@@ -153,8 +193,9 @@ public class LoadTestService {
             workerPool.submit(this::workerLoop);
         }
 
-        log.info("Load test started: {} threads, {}MB chunks, file={}, pg2={}",
-            threadCount, chunkSizeMb, videoPath, pg2VideoChunkRepository != null);
+        log.info("Load test started: {} threads, {}MB chunks, file={}, active DBs: pg3={}, pg4={}, pg5={}",
+            threadCount, chunkSizeMb, videoPath,
+            pg3VideoChunkRepository != null, pg4VideoChunkRepository != null, pg5VideoChunkRepository != null);
         return "Started";
     }
 
@@ -184,55 +225,70 @@ public class LoadTestService {
 
                     String hash = computeHash(chunk, hashingRounds);
 
-                    // PostgreSQL write + read
-                    try {
-                        PgVideoChunk pgEntity = new PgVideoChunk();
-                        pgEntity.setChunkData(chunk);
-                        pgEntity.setHash(hash);
-                        pgEntity.setThreadName(Thread.currentThread().getName());
-                        pgEntity.setChunkSize(chunk.length);
-                        pgEntity.setCreatedAt(LocalDateTime.now());
-                        PgVideoChunk pgSaved = pgVideoChunkRepository.save(pgEntity);
-                        statsService.incrementPgInserts();
+                    // Active DB writes/reads (Purple / Amber / Olive)
+                    if (pg3VideoChunkRepository != null) {
+                        try {
+                            Pg3VideoChunk e = new Pg3VideoChunk();
+                            e.setChunkData(chunk);
+                            e.setHash(hash);
+                            e.setThreadName(Thread.currentThread().getName());
+                            e.setChunkSize(chunk.length);
+                            e.setCreatedAt(LocalDateTime.now());
+                            Pg3VideoChunk saved = pg3VideoChunkRepository.save(e);
+                            statsService.incrementInserts("pg3");
 
-                        PgVideoChunk pgFetched = pgVideoChunkRepository.findById(pgSaved.getId()).orElse(null);
-                        statsService.incrementPgReads();
-
-                        if (pgFetched != null) {
-                            String verifyHash = computeHash(pgFetched.getChunkData(), hashingRounds);
-                            if (!hash.equals(verifyHash)) {
+                            Pg3VideoChunk fetched = pg3VideoChunkRepository.findById(saved.getId()).orElse(null);
+                            statsService.incrementReads("pg3");
+                            if (fetched != null && !hash.equals(computeHash(fetched.getChunkData(), hashingRounds))) {
                                 statsService.incrementErrors();
                             }
+                        } catch (Exception ex) {
+                            statsService.incrementErrors();
+                            log.debug("Purple (pg3) operation failed", ex);
                         }
-                    } catch (Exception e) {
-                        statsService.incrementErrors();
-                        log.debug("PG operation failed", e);
                     }
 
-                    // PG2 write + read
-                    if (pg2VideoChunkRepository != null) {
+                    if (pg4VideoChunkRepository != null) {
                         try {
-                            Pg2VideoChunk pg2Entity = new Pg2VideoChunk();
-                            pg2Entity.setChunkData(chunk);
-                            pg2Entity.setHash(hash);
-                            pg2Entity.setThreadName(Thread.currentThread().getName());
-                            pg2Entity.setChunkSize(chunk.length);
-                            pg2Entity.setCreatedAt(LocalDateTime.now());
-                            Pg2VideoChunk pg2Saved = pg2VideoChunkRepository.save(pg2Entity);
-                            statsService.incrementPg2Inserts();
+                            Pg4VideoChunk e = new Pg4VideoChunk();
+                            e.setChunkData(chunk);
+                            e.setHash(hash);
+                            e.setThreadName(Thread.currentThread().getName());
+                            e.setChunkSize(chunk.length);
+                            e.setCreatedAt(LocalDateTime.now());
+                            Pg4VideoChunk saved = pg4VideoChunkRepository.save(e);
+                            statsService.incrementInserts("pg4");
 
-                            Pg2VideoChunk pg2Fetched = pg2VideoChunkRepository.findById(pg2Saved.getId()).orElse(null);
-                            statsService.incrementPg2Reads();
-
-                            if (pg2Fetched != null) {
-                                String verifyHash = computeHash(pg2Fetched.getChunkData(), hashingRounds);
-                                if (!hash.equals(verifyHash)) {
-                                    statsService.incrementErrors();
-                                }
+                            Pg4VideoChunk fetched = pg4VideoChunkRepository.findById(saved.getId()).orElse(null);
+                            statsService.incrementReads("pg4");
+                            if (fetched != null && !hash.equals(computeHash(fetched.getChunkData(), hashingRounds))) {
+                                statsService.incrementErrors();
                             }
-                        } catch (Exception e) {
+                        } catch (Exception ex) {
                             statsService.incrementErrors();
-                            log.debug("PG2 operation failed", e);
+                            log.debug("Amber (pg4) operation failed", ex);
+                        }
+                    }
+
+                    if (pg5VideoChunkRepository != null) {
+                        try {
+                            Pg5VideoChunk e = new Pg5VideoChunk();
+                            e.setChunkData(chunk);
+                            e.setHash(hash);
+                            e.setThreadName(Thread.currentThread().getName());
+                            e.setChunkSize(chunk.length);
+                            e.setCreatedAt(LocalDateTime.now());
+                            Pg5VideoChunk saved = pg5VideoChunkRepository.save(e);
+                            statsService.incrementInserts("pg5");
+
+                            Pg5VideoChunk fetched = pg5VideoChunkRepository.findById(saved.getId()).orElse(null);
+                            statsService.incrementReads("pg5");
+                            if (fetched != null && !hash.equals(computeHash(fetched.getChunkData(), hashingRounds))) {
+                                statsService.incrementErrors();
+                            }
+                        } catch (Exception ex) {
+                            statsService.incrementErrors();
+                            log.debug("Olive (pg5) operation failed", ex);
                         }
                     }
 
@@ -316,20 +372,27 @@ public class LoadTestService {
     }
 
     private void pollDbStats() {
-        try {
-            statsService.setPgRowCount(pgVideoChunkRepository.count());
-            statsService.setPgSizeBytes(pgVideoChunkRepository.getTableSizeBytes());
-        } catch (Exception e) {
-            log.debug("Failed to poll PG stats", e);
-        }
-
+        pollOne("pg", pgVideoChunkRepository::count, pgVideoChunkRepository::getTableSizeBytes);
         if (pg2VideoChunkRepository != null) {
-            try {
-                statsService.setPg2RowCount(pg2VideoChunkRepository.count());
-                statsService.setPg2SizeBytes(pg2VideoChunkRepository.getTableSizeBytes());
-            } catch (Exception e) {
-                log.debug("Failed to poll PG2 stats", e);
-            }
+            pollOne("pg2", pg2VideoChunkRepository::count, pg2VideoChunkRepository::getTableSizeBytes);
+        }
+        if (pg3VideoChunkRepository != null) {
+            pollOne("pg3", pg3VideoChunkRepository::count, pg3VideoChunkRepository::getTableSizeBytes);
+        }
+        if (pg4VideoChunkRepository != null) {
+            pollOne("pg4", pg4VideoChunkRepository::count, pg4VideoChunkRepository::getTableSizeBytes);
+        }
+        if (pg5VideoChunkRepository != null) {
+            pollOne("pg5", pg5VideoChunkRepository::count, pg5VideoChunkRepository::getTableSizeBytes);
+        }
+    }
+
+    private void pollOne(String key, java.util.function.LongSupplier count, java.util.function.LongSupplier size) {
+        try {
+            statsService.setRowCount(key, count.getAsLong());
+            statsService.setSizeBytes(key, size.getAsLong());
+        } catch (Exception e) {
+            log.debug("Failed to poll {} stats", key, e);
         }
     }
 

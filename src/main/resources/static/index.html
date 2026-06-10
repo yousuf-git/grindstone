@@ -21,8 +21,6 @@
     <style>
         body { background: #0b0f1a; font-family: 'Inter', system-ui, sans-serif; }
         .card { background: linear-gradient(135deg, rgba(30,41,59,0.8), rgba(17,24,39,0.9)); border: 1px solid rgba(99,102,241,0.15); }
-        .card-pg { border-color: rgba(52,211,153,0.25); }
-        .card-pg2 { border-color: rgba(96,165,250,0.25); }
         .glow { box-shadow: 0 0 20px rgba(99,102,241,0.1); }
         .stat-value { font-variant-numeric: tabular-nums; }
         @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -84,7 +82,7 @@
     </div>
 
     <!-- Stat Cards Row 1: System -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <div class="card rounded-xl p-4 text-center">
             <div class="text-xs text-gray-500 mb-1">CPU (System)</div>
             <div id="stat-cpu" class="text-2xl font-bold text-indigo-400 stat-value">0%</div>
@@ -103,38 +101,17 @@
             <div id="stat-ops" class="text-2xl font-bold text-emerald-400 stat-value">0</div>
         </div>
         <div class="card rounded-xl p-4 text-center">
-            <div class="text-xs text-gray-500 mb-1">Active Threads</div>
-            <div id="stat-threads" class="text-2xl font-bold text-amber-400 stat-value">0</div>
-        </div>
-    </div>
-
-    <!-- Stat Cards Row 2: Databases -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        <div class="card card-pg rounded-xl p-4 text-center">
-            <div class="text-xs text-emerald-500 mb-1">PG Rows</div>
-            <div id="stat-pg-rows" class="text-2xl font-bold text-emerald-400 stat-value">0</div>
-        </div>
-        <div class="card card-pg rounded-xl p-4 text-center">
-            <div class="text-xs text-emerald-500 mb-1">PG Storage</div>
-            <div id="stat-pg-size" class="text-2xl font-bold text-emerald-300 stat-value">0 B</div>
-            <div class="mt-1.5 w-full bg-dark-900 rounded-full h-1.5"><div id="bar-pg" class="h-1.5 rounded-full bg-emerald-500 transition-all" style="width:0%"></div></div>
-            <div id="stat-pg-cap" class="text-xs text-gray-600 mt-1">/ 0 B</div>
-        </div>
-        <div class="card card-pg2 rounded-xl p-4 text-center" id="card-pg2-rows">
-            <div class="text-xs text-blue-400 mb-1">PG2 Rows</div>
-            <div id="stat-pg2-rows" class="text-2xl font-bold text-blue-400 stat-value">0</div>
-        </div>
-        <div class="card card-pg2 rounded-xl p-4 text-center" id="card-pg2-size">
-            <div class="text-xs text-blue-400 mb-1">PG2 Storage</div>
-            <div id="stat-pg2-size" class="text-2xl font-bold text-blue-300 stat-value">0 B</div>
-            <div class="mt-1.5 w-full bg-dark-900 rounded-full h-1.5"><div id="bar-pg2" class="h-1.5 rounded-full bg-blue-500 transition-all" style="width:0%"></div></div>
-            <div id="stat-pg2-cap" class="text-xs text-gray-600 mt-1">/ 0 B</div>
-        </div>
-        <div class="card rounded-xl p-4 text-center">
             <div class="text-xs text-gray-500 mb-1">Errors</div>
             <div id="stat-errors" class="text-2xl font-bold text-red-400 stat-value">0</div>
         </div>
     </div>
+
+    <!-- Database Cards (rendered dynamically) -->
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-400">Databases</h2>
+        <span class="text-xs text-gray-600">Active Threads: <strong id="stat-threads" class="text-amber-400 stat-value">0</strong></span>
+    </div>
+    <div id="db-cards" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6"></div>
 
     <!-- Charts Row 1: CPU + Memory -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -148,26 +125,26 @@
         </div>
     </div>
 
-    <!-- Charts Row 2: PG + PG2 -->
+    <!-- Charts Row 2: DB Writes + DB Reads -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <div class="card card-pg rounded-xl p-4">
-            <h3 class="text-sm font-semibold text-emerald-400 mb-3">PostgreSQL Ops/sec</h3>
-            <div class="relative" style="height:220px"><canvas id="chart-pg"></canvas></div>
+        <div class="card rounded-xl p-4">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">DB Writes/sec (active)</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-writes"></canvas></div>
         </div>
-        <div class="card card-pg2 rounded-xl p-4" id="card-pg2-chart">
-            <h3 class="text-sm font-semibold text-blue-400 mb-3">PostgreSQL 2 Ops/sec</h3>
-            <div class="relative" style="height:220px"><canvas id="chart-pg2"></canvas></div>
+        <div class="card rounded-xl p-4">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">DB Reads/sec (active)</h3>
+            <div class="relative" style="height:220px"><canvas id="chart-reads"></canvas></div>
         </div>
     </div>
 
-    <!-- Charts Row 3: Throughput -->
+    <!-- Charts Row 3: Throughput + DB Size -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div class="card rounded-xl p-4">
             <h3 class="text-sm font-semibold text-gray-400 mb-3">Throughput</h3>
             <div class="relative" style="height:220px"><canvas id="chart-throughput"></canvas></div>
         </div>
         <div class="card rounded-xl p-4">
-            <h3 class="text-sm font-semibold text-gray-400 mb-3">DB Size Growth</h3>
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">DB Size Growth (all)</h3>
             <div class="relative" style="height:220px"><canvas id="chart-dbsize"></canvas></div>
         </div>
     </div>
@@ -178,8 +155,6 @@
             <span>Total Ops: <strong id="foot-ops" class="text-white stat-value">0</strong></span>
             <span>Bytes Processed: <strong id="foot-bytes" class="text-white stat-value">0 B</strong></span>
             <span>Uptime: <strong id="foot-uptime" class="text-white stat-value">00:00:00</strong></span>
-            <span class="text-emerald-400">PG: <strong id="foot-pg-ws" class="stat-value">0</strong>w/s <strong id="foot-pg-rs" class="stat-value">0</strong>r/s <strong id="foot-pg-rows" class="stat-value">0</strong> rows <strong id="foot-pg-size" class="stat-value">0 B</strong></span>
-            <span class="text-blue-400" id="foot-pg2">PG2: <strong id="foot-pg2-ws" class="stat-value">0</strong>w/s <strong id="foot-pg2-rs" class="stat-value">0</strong>r/s <strong id="foot-pg2-rows" class="stat-value">0</strong> rows <strong id="foot-pg2-size" class="stat-value">0 B</strong></span>
         </div>
     </div>
 </div>
@@ -188,7 +163,16 @@
 const MAX_POINTS = 120;
 let ws = null;
 let testRunning = false;
-let pg2Enabled = false;
+
+// Per-database color theme keyed by db key
+const DB_COLORS = {
+    pg:  { line: '#34d399', bg: 'rgba(52,211,153,0.1)',  text: 'text-emerald-400', bar: 'bg-emerald-500' },
+    pg2: { line: '#60a5fa', bg: 'rgba(96,165,250,0.1)',  text: 'text-blue-400',    bar: 'bg-blue-500' },
+    pg3: { line: '#c084fc', bg: 'rgba(192,132,252,0.1)', text: 'text-purple-400',  bar: 'bg-purple-500' },
+    pg4: { line: '#fbbf24', bg: 'rgba(251,191,36,0.1)',  text: 'text-amber-400',   bar: 'bg-amber-500' },
+    pg5: { line: '#a3e635', bg: 'rgba(163,230,53,0.1)',  text: 'text-lime-400',    bar: 'bg-lime-500' }
+};
+function dbColor(key) { return DB_COLORS[key] || { line: '#9ca3af', bg: 'rgba(156,163,175,0.1)', text: 'text-gray-400', bar: 'bg-gray-500' }; }
 
 const chartDefaults = {
     responsive: true,
@@ -229,32 +213,6 @@ const memChart = new Chart(document.getElementById('chart-mem'), {
     options: chartDefaults
 });
 
-const pgChart = new Chart(document.getElementById('chart-pg'), {
-    type: 'line',
-    data: {
-        labels: makeLabels(),
-        datasets: [
-            { label: 'PG Writes/s', data: makeData(), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.1)', fill: true },
-            { label: 'PG Reads/s', data: makeData(), borderColor: '#6ee7b7', backgroundColor: 'rgba(110,231,183,0.1)', fill: true },
-            { label: 'PG Size (MB)', data: makeData(), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: false, yAxisID: 'y1' }
-        ]
-    },
-    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#10b981', font: { size: 10 } } } } }
-});
-
-const pg2Chart = new Chart(document.getElementById('chart-pg2'), {
-    type: 'line',
-    data: {
-        labels: makeLabels(),
-        datasets: [
-            { label: 'PG2 Writes/s', data: makeData(), borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.1)', fill: true },
-            { label: 'PG2 Reads/s', data: makeData(), borderColor: '#93c5fd', backgroundColor: 'rgba(147,197,253,0.1)', fill: true },
-            { label: 'PG2 Size (MB)', data: makeData(), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, yAxisID: 'y1' }
-        ]
-    },
-    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { color: '#3b82f6', font: { size: 10 } } } } }
-});
-
 const throughputChart = new Chart(document.getElementById('chart-throughput'), {
     type: 'line',
     data: {
@@ -266,17 +224,71 @@ const throughputChart = new Chart(document.getElementById('chart-throughput'), {
     options: chartDefaults
 });
 
-const dbSizeChart = new Chart(document.getElementById('chart-dbsize'), {
-    type: 'line',
-    data: {
-        labels: makeLabels(),
-        datasets: [
-            { label: 'PG Size (MB)', data: makeData(), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.1)', fill: true },
-            { label: 'PG2 Size (MB)', data: makeData(), borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.1)', fill: true }
-        ]
-    },
-    options: chartDefaults
-});
+// DB charts built dynamically once the first snapshot reveals the database list
+let writesChart = null, readsChart = null, dbSizeChart = null;
+let dbBuilt = false;
+let activeKeys = [];  // keys plotted in writes/reads charts
+let allKeys = [];     // keys plotted in size chart
+
+function buildDbUI(databases) {
+    // ----- DB cards -----
+    const grid = document.getElementById('db-cards');
+    grid.innerHTML = databases.map(d => {
+        const c = dbColor(d.key);
+        const badge = d.active
+            ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300">ACTIVE</span>'
+            : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-700/60 text-gray-400">STOPPED</span>';
+        return `
+        <div class="card rounded-xl p-4" id="dbcard-${d.key}" style="border-color:${c.line}40">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold ${c.text}">${d.label}</span>
+                ${badge}
+            </div>
+            <div class="text-2xl font-bold ${c.text} stat-value" id="db-${d.key}-rows">0</div>
+            <div class="text-xs text-gray-500 mb-2">rows</div>
+            <div class="w-full bg-dark-900 rounded-full h-1.5"><div id="db-${d.key}-bar" class="h-1.5 rounded-full ${c.bar} transition-all" style="width:0%"></div></div>
+            <div class="text-xs text-gray-600 mt-1" id="db-${d.key}-cap">0 B</div>
+            <div class="flex justify-between text-xs mt-2 ${d.active ? '' : 'opacity-40'}">
+                <span class="text-gray-400"><strong id="db-${d.key}-ws" class="stat-value">0</strong> w/s</span>
+                <span class="text-gray-400"><strong id="db-${d.key}-rs" class="stat-value">0</strong> r/s</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    // ----- DB charts -----
+    activeKeys = databases.filter(d => d.active).map(d => d.key);
+    allKeys = databases.map(d => d.key);
+    const byKey = Object.fromEntries(databases.map(d => [d.key, d]));
+
+    writesChart = new Chart(document.getElementById('chart-writes'), {
+        type: 'line',
+        data: {
+            labels: makeLabels(),
+            datasets: activeKeys.map(k => ({ label: byKey[k].label + ' w/s', data: makeData(), borderColor: dbColor(k).line, backgroundColor: dbColor(k).bg, fill: true }))
+        },
+        options: chartDefaults
+    });
+
+    readsChart = new Chart(document.getElementById('chart-reads'), {
+        type: 'line',
+        data: {
+            labels: makeLabels(),
+            datasets: activeKeys.map(k => ({ label: byKey[k].label + ' r/s', data: makeData(), borderColor: dbColor(k).line, backgroundColor: dbColor(k).bg, fill: true }))
+        },
+        options: chartDefaults
+    });
+
+    dbSizeChart = new Chart(document.getElementById('chart-dbsize'), {
+        type: 'line',
+        data: {
+            labels: makeLabels(),
+            datasets: allKeys.map(k => ({ label: byKey[k].label + ' (MB)', data: makeData(), borderColor: dbColor(k).line, backgroundColor: dbColor(k).bg, fill: false }))
+        },
+        options: chartDefaults
+    });
+
+    dbBuilt = true;
+}
 
 function pushPoint(chart, datasetIdx, value) {
     const ds = chart.data.datasets[datasetIdx].data;
@@ -303,16 +315,6 @@ function fmtTime(sec) {
     return `${h}:${m}:${s}`;
 }
 
-function updatePg2Visibility(enabled) {
-    if (pg2Enabled === enabled) return;
-    pg2Enabled = enabled;
-    const pg2Els = ['card-pg2-rows', 'card-pg2-size', 'card-pg2-chart', 'foot-pg2'];
-    pg2Els.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.opacity = enabled ? '1' : '0.3';
-    });
-}
-
 function updateUI(d) {
     document.getElementById('stat-cpu').textContent = d.cpuUsage + '%';
     document.getElementById('stat-pcpu').textContent = d.processCpuUsage + '%';
@@ -322,65 +324,58 @@ function updateUI(d) {
     document.getElementById('stat-threads').textContent = d.activeThreads;
     document.getElementById('stat-errors').textContent = d.errors;
 
-    // PG stats
-    document.getElementById('stat-pg-rows').textContent = (d.pgRowCount || 0).toLocaleString();
-    document.getElementById('stat-pg-size').textContent = fmtBytes(d.pgSizeBytes || 0);
-    if (d.pgMaxBytes > 0) {
-        const pct = Math.min(100, (d.pgSizeBytes || 0) / d.pgMaxBytes * 100);
-        document.getElementById('bar-pg').style.width = pct.toFixed(1) + '%';
-        document.getElementById('bar-pg').className = 'h-1.5 rounded-full transition-all ' + (pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-emerald-500');
-        document.getElementById('stat-pg-cap').textContent = fmtBytes(d.pgSizeBytes || 0) + ' / ' + fmtBytes(d.pgMaxBytes) + ' (' + pct.toFixed(1) + '%)';
-    }
+    const databases = d.databases || [];
+    if (!dbBuilt && databases.length) buildDbUI(databases);
 
-    // PG2 stats
-    updatePg2Visibility(d.pg2Enabled || false);
-    document.getElementById('stat-pg2-rows').textContent = (d.pg2RowCount || 0).toLocaleString();
-    document.getElementById('stat-pg2-size').textContent = fmtBytes(d.pg2SizeBytes || 0);
-    if (d.pg2MaxBytes > 0) {
-        const pct = Math.min(100, (d.pg2SizeBytes || 0) / d.pg2MaxBytes * 100);
-        document.getElementById('bar-pg2').style.width = pct.toFixed(1) + '%';
-        document.getElementById('bar-pg2').className = 'h-1.5 rounded-full transition-all ' + (pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-500' : 'bg-blue-500');
-        document.getElementById('stat-pg2-cap').textContent = fmtBytes(d.pg2SizeBytes || 0) + ' / ' + fmtBytes(d.pg2MaxBytes) + ' (' + pct.toFixed(1) + '%)';
-    }
+    const byKey = Object.fromEntries(databases.map(x => [x.key, x]));
+
+    // Per-DB cards
+    databases.forEach(db => {
+        const rows = document.getElementById('db-' + db.key + '-rows');
+        if (!rows) return;
+        rows.textContent = (db.rowCount || 0).toLocaleString();
+        document.getElementById('db-' + db.key + '-ws').textContent = db.insertsPerSecond || 0;
+        document.getElementById('db-' + db.key + '-rs').textContent = db.readsPerSecond || 0;
+        const cap = document.getElementById('db-' + db.key + '-cap');
+        const bar = document.getElementById('db-' + db.key + '-bar');
+        if (db.maxBytes > 0) {
+            const pct = Math.min(100, (db.sizeBytes || 0) / db.maxBytes * 100);
+            bar.style.width = pct.toFixed(2) + '%';
+            cap.textContent = fmtBytes(db.sizeBytes || 0) + ' / ' + fmtBytes(db.maxBytes) + ' (' + pct.toFixed(2) + '%)';
+            if (pct > 90) { bar.className = 'h-1.5 rounded-full transition-all bg-red-500'; }
+            else if (pct > 70) { bar.className = 'h-1.5 rounded-full transition-all bg-yellow-500'; }
+            else { bar.className = 'h-1.5 rounded-full transition-all ' + dbColor(db.key).bar; }
+        } else {
+            cap.textContent = fmtBytes(db.sizeBytes || 0);
+        }
+    });
 
     // Footer
     document.getElementById('foot-ops').textContent = d.totalOps.toLocaleString();
     document.getElementById('foot-bytes').textContent = fmtBytes(d.totalBytesProcessed);
     document.getElementById('foot-uptime').textContent = fmtTime(d.uptimeSeconds);
 
-    document.getElementById('foot-pg-ws').textContent = d.pgInsertsPerSecond || 0;
-    document.getElementById('foot-pg-rs').textContent = d.pgReadsPerSecond || 0;
-    document.getElementById('foot-pg-rows').textContent = (d.pgRowCount || 0).toLocaleString();
-    document.getElementById('foot-pg-size').textContent = fmtBytes(d.pgSizeBytes || 0);
-
-    document.getElementById('foot-pg2-ws').textContent = d.pg2InsertsPerSecond || 0;
-    document.getElementById('foot-pg2-rs').textContent = d.pg2ReadsPerSecond || 0;
-    document.getElementById('foot-pg2-rows').textContent = (d.pg2RowCount || 0).toLocaleString();
-    document.getElementById('foot-pg2-size').textContent = fmtBytes(d.pg2SizeBytes || 0);
-
     if (d.videoPath) {
         document.getElementById('video-info').textContent = d.videoPath + (d.videoSize ? ' (' + fmtBytes(d.videoSize) + ')' : '');
     }
 
-    // Charts
+    // System charts
     pushPoint(cpuChart, 0, d.cpuUsage);
     pushPoint(cpuChart, 1, d.processCpuUsage);
-
     pushPoint(memChart, 0, d.heapUsed / 1048576);
     pushPoint(memChart, 1, d.nonHeapUsed / 1048576);
-
-    pushPoint(pgChart, 0, d.pgInsertsPerSecond || 0);
-    pushPoint(pgChart, 1, d.pgReadsPerSecond || 0);
-    pushPoint(pgChart, 2, (d.pgSizeBytes || 0) / 1048576);
-
-    pushPoint(pg2Chart, 0, d.pg2InsertsPerSecond || 0);
-    pushPoint(pg2Chart, 1, d.pg2ReadsPerSecond || 0);
-    pushPoint(pg2Chart, 2, (d.pg2SizeBytes || 0) / 1048576);
-
     pushPoint(throughputChart, 0, d.bytesPerSecond / 1048576);
 
-    pushPoint(dbSizeChart, 0, (d.pgSizeBytes || 0) / 1048576);
-    pushPoint(dbSizeChart, 1, (d.pg2SizeBytes || 0) / 1048576);
+    // DB charts
+    if (dbBuilt) {
+        activeKeys.forEach((k, i) => {
+            pushPoint(writesChart, i, byKey[k] ? (byKey[k].insertsPerSecond || 0) : 0);
+            pushPoint(readsChart, i, byKey[k] ? (byKey[k].readsPerSecond || 0) : 0);
+        });
+        allKeys.forEach((k, i) => {
+            pushPoint(dbSizeChart, i, byKey[k] ? (byKey[k].sizeBytes || 0) / 1048576 : 0);
+        });
+    }
 
     testRunning = d.running;
     updateButton();
